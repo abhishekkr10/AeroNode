@@ -10,7 +10,7 @@ Fixed-depth inference ignores changes in CPU load, thermal pressure, and latency
 
 ## Implementation State
 
-This document separates committed design from implemented behavior. The Phase-1 single-model vertical slice is implemented and verified across PyTorch, ONNX, Python ONNX Runtime, and C++ ONNX Runtime. Multi-exit execution, IPC, policy adaptation, full benchmarks, allocator experiments, and telemetry are planned and are not yet implemented. `current_status.md` is the source of truth for completed work.
+This document separates committed design from implemented behavior. The Phase-1 single-model vertical slice is verified across PyTorch, ONNX, Python ONNX Runtime, and C++ ONNX Runtime. The Phase-2 PyTorch multi-exit model is implemented, trained on Imagenette, and independently validated at all four heads. ONNX export of this model, staged C++ execution, IPC, policy adaptation, full benchmarks, allocator experiments, and telemetry are not yet implemented. `current_status.md` is the source of truth for completed work.
 
 ## High-Level Architecture
 
@@ -89,6 +89,12 @@ input -> stem -> block 1 -> exit 1
 
 Training will use a weighted sum of cross-entropy losses. Each exit must be evaluated independently before C++ integration. Phase 1 intentionally uses a tiny fully connected model and synthetic deterministic input to validate the toolchain without conflating integration with model quality.
 
+Phase 2 uses the official 160-pixel Imagenette distribution and trains from random initialization. The concrete backbone is a compact ResNet-18-style network with four residual stages, two basic blocks per stage, channel widths `[32, 64, 128, 256]`, and 2,803,720 trainable parameters. Each stage ends in an independent head consisting of adaptive global average pooling and a linear 10-class classifier. All four logits tensors are returned together during PyTorch training/evaluation. The initial weighted loss is `0.15, 0.20, 0.25, 0.40` from earliest to final exit; the final head retains the largest influence while intermediate heads receive direct supervision. These weights are configuration recorded with every run, not claimed to be optimal.
+
+Training uses random resized crops and horizontal flips at 128x128, while validation uses deterministic resize/center crop. The lower crop size is an explicit CPU-development trade-off while still using the complete Imagenette train/validation splits. Each epoch records weighted aggregate loss plus unweighted cross-entropy loss, top-1 accuracy, and sample count for every exit. A checkpoint is valid for later phases only after every head has been evaluated on the Imagenette validation split and the metrics artifact identifies the dataset classes, split sizes, seed, architecture, and loss weights.
+
+The accepted Phase-2 prototype was trained from scratch for five epochs with SGD, momentum 0.9, initial learning rate 0.05, cosine decay, weight decay `5e-4`, batch size 64, and seed 20260916. A fresh reload of the best checkpoint evaluated all 3,925 validation images and reproduced per-exit accuracy of 57.27%, 66.73%, 71.80%, and 73.10%. This establishes that every classifier is useful and that accuracy generally improves with depth; it is not a claim that five epochs or the loss weights are optimal.
+
 ## Entropy, Confidence, and Adaptive Policy
 
 For logits `z`, the runtime computes a numerically stable softmax and Shannon entropy `H = -sum(p_i * log(p_i))`. Confidence is `max(p_i)`. Unit tests will cover normalized, uniform, peaked, and extreme-logit cases.
@@ -147,6 +153,10 @@ Only files required by the current vertical slice are created. CMake discovers O
 
 - `model/training/simple_model.py`: deterministic Phase-1 PyTorch model and reference input.
 - `model/export/export_simple_model.py`: ONNX export plus ONNX checker and Python Runtime comparison when dependencies are available.
+- `model/training/multi_exit_resnet.py`: compact four-stage ResNet backbone, exit heads, and weighted loss.
+- `model/training/imagenette_data.py`: official Imagenette download, checksum, transforms, and split validation.
+- `model/training/train_multi_exit.py`: reproducible training, per-exit metrics, and checkpoint selection.
+- `model/training/evaluate_multi_exit.py`: checkpoint-reload validation of every exit.
 - `runtime/src/main.cpp`: CLI model loading, inference, logits output, and latency summary.
 - root/runtime CMake files: portable C++17 target and explicit ONNX Runtime dependency validation.
 - Future `control_plane`: RuntimeState publisher and policy experiment inputs.
@@ -156,7 +166,7 @@ The Phase-1 runtime CLI contract is `aeronode_runtime --model <path> [--iteratio
 
 ## Dependencies
 
-Required for Phase 1: Python, PyTorch, ONNX, ONNX Runtime Python (verification), C++17 compiler, CMake, and ONNX Runtime C/C++ SDK. Later phases add torchvision/Imagenette, ZeroMQ/libzmq, a JSON parser, FastAPI, PostgreSQL, and a PostgreSQL Python driver.
+Required for Phase 1: Python, PyTorch, ONNX, ONNX Runtime Python (verification), C++17 compiler, CMake, and ONNX Runtime C/C++ SDK. Phase 2 adds torchvision and the official Imagenette 160-pixel dataset. Later phases add ZeroMQ/libzmq, a JSON parser, FastAPI, PostgreSQL, and a PostgreSQL Python driver.
 
 Dependencies will be isolated/pinned after compatibility is verified; no global installation is assumed.
 
@@ -182,5 +192,6 @@ Dependencies will be isolated/pinned after compatibility is verified; no global 
 - ZeroMQ is not installed and remains a prerequisite for the later IPC phase.
 - The project-local Phase-1 dependencies and official ONNX Runtime 1.30.0 SDK are intentionally not committed; setup remains platform-specific until a bootstrap script is added.
 - The official ONNX Runtime 1.30.0 Windows import library links and runs with MSYS2 GCC 15.2 for the current C-API-backed wrapper usage, but broader ABI compatibility will be rechecked as runtime features grow.
-- Imagenette training cost, calibrated thresholds, stage-boundary overhead, and achievable accuracy are not known yet.
+- Five CPU epochs establish prototype behavior but are not a converged accuracy study; loss-weight/epoch calibration remains future experimental work.
+- Entropy thresholds, stage-boundary overhead, and adaptive-policy behavior are not known yet.
 - Temperature is simulated unless a portable hardware sensor source is added later.

@@ -15,10 +15,22 @@
 - Configured and built the C++17 runtime with CMake/Ninja and MSYS2 GCC 15.2.
 - Completed the first vertical slice: C++ ONNX Runtime matched Python ONNX Runtime with maximum absolute error `1.4901161193847656e-08`, predicted class 1, and measured 500 iterations at 0.0035376 ms mean / 0.0037 ms P95 on the tiny synthetic model.
 - Added an automated Phase-1 C++/Python parity verifier and pinned direct Phase-1 dependencies.
+- Re-read `architecture.md` and `current_status.md` before Phase-2 implementation.
+- Confirmed the installed PyTorch build is CPU-only, 14 CPU threads are available, and sufficient local storage exists.
+- Selected the official Imagenette 160-pixel distribution and documented the concrete Phase-2 architecture, transforms, exit heads, and initial loss weights.
+- Installed project-local torchvision 0.29.0 (matched to PyTorch 2.14.0) and Pillow 12.3.0.
+- Implemented the compact four-stage ResNet-style model with four independent classifier heads.
+- Implemented normalized weighted multi-exit cross-entropy and unit tests proving all four heads produce the expected shape and receive direct nonzero gradients.
+- Implemented official Imagenette download/loading, reproducible augmentation, training, checkpointing, and per-exit loss/accuracy metric recording.
+- Downloaded and validated the official Imagenette 160-pixel archive (`sha256:64d0c4859f35a461889e0147755a999a48b49bf38a7e0f9bd27003f10db02fe5`): 9,469 training images, 3,925 validation images, and 10 matching classes.
+- Completed a bounded real-data training/evaluation smoke run, confirming data loading, four-exit metrics, backpropagation, optimizer updates, checkpointing, and JSON artifacts.
+- Completed five full training epochs on all 9,469 Imagenette training images, recording aggregate and per-exit metrics after every epoch.
+- Reloaded the best checkpoint in a separate validation-only process and evaluated all 3,925 validation images. Exit 1-4 accuracy was 57.27%, 66.73%, 71.80%, and 73.10%; loss was 1.3789, 1.0536, 0.8758, and 0.8300.
+- Confirmed the validation-only report exactly reproduces the best in-training metrics, independently validating all four classifier heads.
 
 ## In Progress
 
-- No implementation task is currently active; Phase 1 is complete and Phase 2 is next.
+- No implementation task is active; Phase 2 is complete and no Phase-3 ONNX work has started.
 
 ## Blocked
 
@@ -26,7 +38,7 @@
 
 ## Next Step
 
-Begin Phase 2 with the smallest multi-exit PyTorch prototype and validate each intermediate classifier before any C++ integration.
+Review the Phase-2 validation record, then begin Phase 3 by designing/exporting stage boundaries without changing the validated PyTorch behavior.
 
 ## Known Issues
 
@@ -44,6 +56,8 @@ Begin Phase 2 with the smallest multi-exit PyTorch prototype and validate each i
 - Keep Python outside the core inference path.
 - Do not install or modify global dependencies during initial inspection.
 - Keep generated models, downloaded SDKs, build output, and the virtual environment out of Git.
+- Use the full official Imagenette train/validation splits with 128x128 crops for the initial CPU-only Phase-2 experiment.
+- Use exit-loss weights `[0.15, 0.20, 0.25, 0.40]`; record them with run metrics and treat them as an initial experimental choice.
 
 ## Environment / Dependencies
 
@@ -52,7 +66,8 @@ Begin Phase 2 with the smallest multi-exit PyTorch prototype and validate each i
 - C/C++: MSYS2 UCRT64 GCC/G++ 15.2.0 at `C:\msys64\ucrt64\bin\g++.exe`; MSVC and Clang not discovered on `PATH`.
 - CMake: 4.4.3 in project-local `.venv`; not globally on `PATH`.
 - Python: CPython 3.13.7.
-- Project-local ML stack: PyTorch 2.14.0, ONNX 1.22.0, ONNX Runtime 1.30.0, NumPy 2.5.3; torchvision is not yet required or installed.
+- Project-local ML stack: PyTorch 2.14.0, torchvision 0.29.0, ONNX 1.22.0, ONNX Runtime 1.30.0, NumPy 2.5.3, and Pillow 12.3.0.
+- Phase-2 vision dependencies: torchvision 0.29.0 and Pillow 12.3.0 in `.venv`.
 - ONNX Runtime C++ SDK: official Windows x64 1.30.0, project-local under ignored `.deps`.
 - ZeroMQ / pyzmq: not discovered.
 - FastAPI: 0.141.1; Uvicorn 0.52.4.
@@ -69,3 +84,8 @@ Begin Phase 2 with the smallest multi-exit PyTorch prototype and validate each i
 - 2026-09-16: Provisioned isolated Python/build packages and completed PyTorch-to-ONNX/Python Runtime verification.
 - 2026-09-16: Built and ran the C++17 ONNX Runtime executable and verified end-to-end output parity and latency measurement.
 - 2026-09-16: Initialized Git and committed the verified Phase-1 vertical slice as `4e4ff02`.
+- 2026-09-16: Started Phase 2 after re-reading architecture/status and documented the concrete multi-exit training design.
+- 2026-09-16: Implemented and unit-tested the Phase-2 multi-exit model, weighted loss, Imagenette pipeline, and training/evaluation harness.
+- 2026-09-16: Downloaded and validated the complete official Imagenette 160-pixel train/validation dataset.
+- 2026-09-16: Completed the Phase-2 end-to-end smoke run and started full-split training.
+- 2026-09-16: Completed five-epoch full-split training and independent checkpoint-reload validation of every exit.

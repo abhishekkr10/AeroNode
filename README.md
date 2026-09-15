@@ -13,7 +13,9 @@ deterministic PyTorch model -> ONNX export -> C++17 ONNX Runtime inference
                             -> Python/C++ output comparison -> latency measurement
 ```
 
-Multi-exit training, Imagenette, ZeroMQ control updates, adaptive policy, benchmarks, allocator experiments, and telemetry are intentionally subsequent milestones.
+ZeroMQ control updates, adaptive policy, cross-policy benchmarks, allocator experiments, and telemetry remain subsequent milestones.
+
+Phase 2 is now complete: the four-exit PyTorch model was trained on Imagenette and every classifier was independently validated. See `docs/phase2_validation.md` for the recorded metrics. Multi-exit ONNX/C++ integration remains intentionally unimplemented.
 
 ## Repository Layout
 
@@ -64,3 +66,19 @@ The verified reference run predicted class 1, matched Python/C++ logits within `
 - ONNX Runtime behavior and APIs are verified against the installed version.
 - Claims about latency, memory, compute, accuracy, or determinism require benchmark evidence.
 - `current_status.md` is updated after each meaningful milestone.
+
+## Phase-2 Reproduction
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-phase2.txt
+.\.venv\Scripts\python.exe model\training\imagenette_data.py --data-root data
+.\.venv\Scripts\python.exe -m unittest tests.test_multi_exit_model -v
+.\.venv\Scripts\python.exe model\training\train_multi_exit.py `
+  --data-root data `
+  --output-dir model\artifacts\phase2-imagenette-5ep `
+  --epochs 5 --batch-size 64 --workers 4
+.\.venv\Scripts\python.exe model\training\evaluate_multi_exit.py `
+  --checkpoint model\artifacts\phase2-imagenette-5ep\best_final_exit.pt `
+  --data-root data `
+  --output model\artifacts\phase2-imagenette-5ep\validation_report.json
+```
