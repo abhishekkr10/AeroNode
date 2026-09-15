@@ -18,7 +18,7 @@
 
 ## In Progress
 
-- Phase-1 handoff documentation and reproducibility cleanup.
+- No implementation task is currently active; Phase 1 is complete and Phase 2 is next.
 
 ## Blocked
 
@@ -68,3 +68,4 @@ Begin Phase 2 with the smallest multi-exit PyTorch prototype and validate each i
 - 2026-09-16: Added the minimum repository layout and Phase-1 Python/C++ source files.
 - 2026-09-16: Provisioned isolated Python/build packages and completed PyTorch-to-ONNX/Python Runtime verification.
 - 2026-09-16: Built and ran the C++17 ONNX Runtime executable and verified end-to-end output parity and latency measurement.
+- 2026-09-16: Initialized Git and committed the verified Phase-1 vertical slice as `4e4ff02`.
