@@ -27,10 +27,18 @@
 - Completed five full training epochs on all 9,469 Imagenette training images, recording aggregate and per-exit metrics after every epoch.
 - Reloaded the best checkpoint in a separate validation-only process and evaluated all 3,925 validation images. Exit 1-4 accuracy was 57.27%, 66.73%, 71.80%, and 73.10%; loss was 1.3789, 1.0536, 0.8758, and 0.8300.
 - Confirmed the validation-only report exactly reproduces the best in-training metrics, independently validating all four classifier heads.
+- Re-read `architecture.md`, `current_status.md`, and `docs/phase2_validation.md` before Phase-3 implementation.
+- Implemented the Phase-3 exporter using the accepted best epoch-5 checkpoint, four named logits outputs, dynamic batch dimensions, opset 17, embedded provenance metadata, structural checks, and per-exit parity checks.
+- Added an automated temporary-model ONNX test that verifies four graph outputs, `[batch, 10]` shapes, dynamic batch execution, and numerical parity for every exit.
+- Successfully exported the accepted epoch-5 checkpoint to `model/artifacts/phase3/multi_exit_imagenette.onnx` (11,217,740 bytes; SHA-256 `0cc08e571383279798c00019f0079bcbc107db49a1fe8efca444a4b754f35051`).
+- Validated the graph with ONNX checker full checks and strict shape inference: opset 17, one dynamic-batch `[batch,3,128,128]` input, four `[batch,10]` outputs, 58 nodes, and 48 initializers.
+- Verified PyTorch/ONNX Runtime parity on ten deterministic validation images spanning all ten classes. Maximum absolute error by exit was `2.3841858e-06`, `9.5367432e-07`, `1.4305115e-06`, and `1.6689301e-06`, within `atol=1e-5` and `rtol=1e-4`.
+- Embedded source checkpoint hash/epoch, dataset hash, class mapping, loss weights, and image size in ONNX metadata.
+- Completed the full Phase-3 regression suite: four tests passed, covering multi-exit shapes/supervision/loss validation plus ONNX four-output structure and parity.
 
 ## In Progress
 
-- No implementation task is active; Phase 2 is complete and no Phase-3 ONNX work has started.
+- No implementation task is active; Phase 3 is complete and no C++ early-exit, ZeroMQ, or adaptive-policy work has started.
 
 ## Blocked
 
@@ -38,7 +46,7 @@
 
 ## Next Step
 
-Review the Phase-2 validation record, then begin Phase 3 by designing/exporting stage boundaries without changing the validated PyTorch behavior.
+Begin Phase 4 by loading the monolithic four-output reference graph in C++ ONNX Runtime and verifying all logits against the Phase-3 reference; do not add adaptive early-exit behavior yet.
 
 ## Known Issues
 
@@ -47,6 +55,7 @@ Review the Phase-2 validation record, then begin Phase 3 by designing/exporting 
 - Only MSYS2 GCC was discovered; MSVC `cl.exe` and Clang were not on `PATH`.
 - The workspace was not a Git repository at inspection time.
 - PDF text extraction was unavailable through `pdftotext`; all pages were rendered and visually read instead.
+- PyTorch 2.14 warns that the explicitly selected legacy TorchScript ONNX exporter is deprecated. It remains the verified Phase-3 path; migration to the dynamo exporter should be evaluated separately without changing this reference artifact.
 
 ## Technical Decisions
 
@@ -58,6 +67,8 @@ Review the Phase-2 validation record, then begin Phase 3 by designing/exporting 
 - Keep generated models, downloaded SDKs, build output, and the virtual environment out of Git.
 - Use the full official Imagenette train/validation splits with 128x128 crops for the initial CPU-only Phase-2 experiment.
 - Use exit-loss weights `[0.15, 0.20, 0.25, 0.40]`; record them with run metrics and treat them as an initial experimental choice.
+- Phase 3 first exports one four-output ONNX graph as the fidelity/reference artifact. Separate stage graphs remain the planned execution representation for later C++ early exit and are not part of this phase.
+- Use ONNX opset 17 with dynamic batch dimensions, named outputs `exit_1_logits` through `exit_4_logits`, `atol=1e-5`, and `rtol=1e-4` for the accepted reference export.
 
 ## Environment / Dependencies
 
@@ -90,3 +101,7 @@ Review the Phase-2 validation record, then begin Phase 3 by designing/exporting 
 - 2026-09-16: Completed the Phase-2 end-to-end smoke run and started full-split training.
 - 2026-09-16: Completed five-epoch full-split training and independent checkpoint-reload validation of every exit.
 - 2026-09-16: Committed the completed Phase-2 implementation and validation record as `240654c`.
+- 2026-09-16: Started Phase 3 after re-reading all accepted architecture/status/validation documents.
+- 2026-09-16: Implemented and unit-tested the four-output ONNX export/inspection/parity pipeline.
+- 2026-09-16: Exported the accepted best checkpoint, passed full graph/shape validation, and verified all four exits against PyTorch on a class-diverse batch.
+- 2026-09-16: Completed Phase 3 with four passing automated tests and a reproducible validation record.

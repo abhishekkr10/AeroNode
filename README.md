@@ -17,6 +17,8 @@ ZeroMQ control updates, adaptive policy, cross-policy benchmarks, allocator expe
 
 Phase 2 is now complete: the four-exit PyTorch model was trained on Imagenette and every classifier was independently validated. See `docs/phase2_validation.md` for the recorded metrics. Multi-exit ONNX/C++ integration remains intentionally unimplemented.
 
+Phase 3 exports the accepted checkpoint as a dynamic-batch, four-output ONNX reference graph and verifies every exit against PyTorch. See `docs/phase3_validation.md`. C++ early-exit execution remains intentionally unimplemented.
+
 ## Repository Layout
 
 - `model/training/` - model definitions and later training code.
@@ -81,4 +83,16 @@ The verified reference run predicted class 1, matched Python/C++ logits within `
   --checkpoint model\artifacts\phase2-imagenette-5ep\best_final_exit.pt `
   --data-root data `
   --output model\artifacts\phase2-imagenette-5ep\validation_report.json
+```
+
+## Phase-3 Reproduction
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest tests.test_multi_exit_onnx -v
+.\.venv\Scripts\python.exe model\export\export_multi_exit.py `
+  --checkpoint model\artifacts\phase2-imagenette-5ep\best_final_exit.pt `
+  --data-root data `
+  --output model\artifacts\phase3\multi_exit_imagenette.onnx `
+  --report model\artifacts\phase3\multi_exit_imagenette.verification.json `
+  --verification-samples 10
 ```

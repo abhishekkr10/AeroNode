@@ -10,7 +10,7 @@ Fixed-depth inference ignores changes in CPU load, thermal pressure, and latency
 
 ## Implementation State
 
-This document separates committed design from implemented behavior. The Phase-1 single-model vertical slice is verified across PyTorch, ONNX, Python ONNX Runtime, and C++ ONNX Runtime. The Phase-2 PyTorch multi-exit model is implemented, trained on Imagenette, and independently validated at all four heads. ONNX export of this model, staged C++ execution, IPC, policy adaptation, full benchmarks, allocator experiments, and telemetry are not yet implemented. `current_status.md` is the source of truth for completed work.
+This document separates committed design from implemented behavior. The Phase-1 single-model vertical slice is verified across PyTorch, ONNX, Python ONNX Runtime, and C++ ONNX Runtime. The Phase-2 PyTorch multi-exit model is trained and independently validated at all four heads. Phase 3 exports that checkpoint as a verified monolithic four-output ONNX reference graph. Staged C++ execution, IPC, policy adaptation, full benchmarks, allocator experiments, and telemetry are not yet implemented. `current_status.md` is the source of truth for completed work.
 
 ## High-Level Architecture
 
@@ -73,6 +73,8 @@ No IPC occurs between neural-network layers.
 The runtime is C++17 and built with CMake. Phase 1 uses one `Ort::Session`, validates tensor names/shapes/types, executes a deterministic input, returns logits, and records warm-up-separated steady-state latency.
 
 Standard ONNX Runtime cannot generally pause and resume an optimized graph. The multi-exit implementation will therefore use separately exported, benchmarkable stage models. A stage consumes either the original input or the preceding stage's feature tensor and produces both the next feature tensor and exit logits. The runtime owns stage sessions and invokes only as many as policy permits. This avoids unsupported graph mutation and makes per-stage cost measurable, at the cost of session boundaries and intermediate tensor movement.
+
+Phase 3 intentionally adds a distinct reference representation before staged execution: one opset-17 ONNX graph with input `input` shaped `[batch_size, 3, 128, 128]` and outputs `exit_1_logits` through `exit_4_logits`, each shaped `[batch_size, 10]`. It proves checkpoint provenance, graph validity, output preservation, dynamic-batch behavior, and PyTorch/ONNX numerical fidelity. It is suitable for the next C++ phase's full-graph multi-output baseline, but it cannot save compute merely by requesting an early output because ONNX Runtime may still execute the shared graph. Separate stage graphs remain the planned later execution representation. This clarifies two artifact roles rather than replacing the staged architecture.
 
 ONNX Runtime APIs and allocator options will be checked against the installed version before use. No allocator or performance claim is made in the MVP.
 
@@ -153,6 +155,7 @@ Only files required by the current vertical slice are created. CMake discovers O
 
 - `model/training/simple_model.py`: deterministic Phase-1 PyTorch model and reference input.
 - `model/export/export_simple_model.py`: ONNX export plus ONNX checker and Python Runtime comparison when dependencies are available.
+- `model/export/export_multi_exit.py`: best-checkpoint four-output ONNX export, provenance metadata, graph inspection, and PyTorch/ONNX Runtime parity report.
 - `model/training/multi_exit_resnet.py`: compact four-stage ResNet backbone, exit heads, and weighted loss.
 - `model/training/imagenette_data.py`: official Imagenette download, checksum, transforms, and split validation.
 - `model/training/train_multi_exit.py`: reproducible training, per-exit metrics, and checkpoint selection.
@@ -186,6 +189,7 @@ Dependencies will be isolated/pinned after compatibility is verified; no global 
 3. **JSON first:** debuggable and adequate at low update frequency. Protobuf/FlatBuffers may reduce overhead but add premature schema/tooling complexity.
 4. **Mutex-protected immutable snapshot:** simple and correct at 5 Hz. A lock-free structure is unnecessary until profiling demonstrates contention.
 5. **GCC initially available:** MSYS2 GCC 15.2 is the only discovered compiler. The PDF recommends MSVC when available, but MSVC is not on `PATH`; CMake remains generator-neutral. This is an environment-driven deviation, not a permanent platform restriction.
+6. **Monolithic reference graph before stage graphs:** Phase 3 preserves all four outputs in one graph to establish a single fidelity baseline. It is not treated as an early-termination mechanism; later stage exports must be checked against both this graph and PyTorch.
 
 ## Known Limitations
 
@@ -194,4 +198,6 @@ Dependencies will be isolated/pinned after compatibility is verified; no global 
 - The official ONNX Runtime 1.30.0 Windows import library links and runs with MSYS2 GCC 15.2 for the current C-API-backed wrapper usage, but broader ABI compatibility will be rechecked as runtime features grow.
 - Five CPU epochs establish prototype behavior but are not a converged accuracy study; loss-weight/epoch calibration remains future experimental work.
 - Entropy thresholds, stage-boundary overhead, and adaptive-policy behavior are not known yet.
+- The Phase-3 monolithic ONNX graph exposes all exits but does not itself guarantee compute savings when an early output is requested.
+- Netron is not installed; ONNX checker, strict shape inference, operator inventory, metadata inspection, and ONNX Runtime execution provide the recorded reproducible inspection.
 - Temperature is simulated unless a portable hardware sensor source is added later.
