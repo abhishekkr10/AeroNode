@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.deps/
+
+# Generated models and benchmark data
+model/artifacts/*
+!model/artifacts/.gitkeep
+benchmarks/results/*
+!benchmarks/results/.gitkeep
+
+# CMake/build outputs
+build/
+cmake-build-*/
+
+# Editors and OS
+.vs/
+*.user
+.DS_Store
+
+# PDF inspection intermediates
+tmp/

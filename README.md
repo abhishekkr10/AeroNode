@@ -1,0 +1,66 @@
+# AeroNode
+
+AeroNode is an experimental C++ edge-AI runtime that will select neural-network inference depth using model confidence and changing runtime constraints. The project focuses on a reproducible answer to one question: when can adaptive early exit reduce latency and compute while retaining acceptable accuracy?
+
+The authoritative project brief is `AeroNode_Project_Brief (1).pdf`. See `architecture.md` for the actual design and `current_status.md` for what is implemented now.
+
+## Current Scope
+
+The current milestone is the smallest Phase-1 vertical slice:
+
+```text
+deterministic PyTorch model -> ONNX export -> C++17 ONNX Runtime inference
+                            -> Python/C++ output comparison -> latency measurement
+```
+
+Multi-exit training, Imagenette, ZeroMQ control updates, adaptive policy, benchmarks, allocator experiments, and telemetry are intentionally subsequent milestones.
+
+## Repository Layout
+
+- `model/training/` - model definitions and later training code.
+- `model/export/` - ONNX export and verification tools.
+- `model/artifacts/` - generated models and reference data (not source).
+- `runtime/` - C++17 inference runtime.
+- `tests/` - unit and integration tests.
+- `benchmarks/` - benchmark scripts and generated results.
+- `control_plane/` - later Python RuntimeState simulator.
+- `api/` - later FastAPI telemetry service.
+
+## Phase-1 Prerequisites
+
+- Python with PyTorch, ONNX, ONNX Runtime, and NumPy.
+- CMake 3.20 or newer.
+- A C++17 compiler compatible with the chosen ONNX Runtime SDK.
+- ONNX Runtime C/C++ SDK, exposed through `ONNXRUNTIME_ROOT`.
+
+The verified direct Python/build versions are pinned in `requirements-phase1.txt`. Install them into a project-local virtual environment. The official ONNX Runtime 1.30.0 Windows x64 SDK was used for the verified run; set `ONNXRUNTIME_ROOT` to its extracted directory. No global dependencies were modified.
+
+## Intended Phase-1 Workflow
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-phase1.txt
+.\.venv\Scripts\python.exe model\export\export_simple_model.py --output model\artifacts\simple_model.onnx
+
+$env:PATH = "C:\msys64\ucrt64\bin;C:\AeroNode\.venv\Scripts;" + $env:PATH
+.\.venv\Scripts\cmake.exe -S . -B build -G Ninja `
+  -DCMAKE_CXX_COMPILER=C:/msys64/ucrt64/bin/g++.exe `
+  -DONNXRUNTIME_ROOT=C:/path/to/onnxruntime-win-x64-1.30.0
+.\.venv\Scripts\cmake.exe --build build
+
+.\.venv\Scripts\python.exe tests\verify_phase1.py `
+  --executable build\runtime\aeronode_runtime.exe `
+  --model model\artifacts\simple_model.onnx `
+  --iterations 500
+```
+
+The verified reference run predicted class 1, matched Python/C++ logits within `1.4901161193847656e-08`, and measured 0.0035376 ms mean / 0.0037 ms P95 over 500 iterations. This is an integration measurement for a tiny synthetic model, not an application performance claim.
+
+## Engineering Rules
+
+- Core inference is C++17 and built with CMake.
+- Python is used for training, export, simulation, orchestration, and telemetry—not core inference.
+- RuntimeState IPC uses ZeroMQ and never sends a message per neural-network layer.
+- ONNX Runtime behavior and APIs are verified against the installed version.
+- Claims about latency, memory, compute, accuracy, or determinism require benchmark evidence.
+- `current_status.md` is updated after each meaningful milestone.

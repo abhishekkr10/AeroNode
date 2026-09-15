@@ -1,0 +1,7 @@
+# Direct Phase-1 Python/build dependencies verified with CPython 3.13.7 on Windows x64.
+cmake==4.4.3
+ninja==1.13.2
+numpy==2.5.3
+onnx==1.22.0
+onnxruntime==1.30.0
+torch==2.14.0
