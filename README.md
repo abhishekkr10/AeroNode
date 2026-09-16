@@ -100,3 +100,25 @@ The verified reference run predicted class 1, matched Python/C++ logits within `
   --report model\artifacts\phase3\multi_exit_imagenette.verification.json `
   --verification-samples 10
 ```
+
+## Generated Artifacts (Intentionally Excluded from Git)
+
+`model/artifacts/` is excluded from version control because model checkpoints and ONNX exports are generated, deterministic artefacts that can be 100% reproduced from committed source code and the downloaded dataset. Including them would bloat the repository history with binary blobs that change on every training run and offer no meaningful diff.
+
+The key Phase-3 artefact is:
+
+| File | Size | SHA-256 |
+|---|---|---|
+| `model/artifacts/phase3/multi_exit_imagenette.onnx` | 10.70 MiB (11,217,740 bytes) | `0cc08e571383279798c00019f0079bcbc107db49a1fe8efca444a4b754f35051` |
+| `model/artifacts/phase2-imagenette-5ep/best_final_exit.pt` | ~21.5 MiB | `32fb2975bcfe14d7311bc91db1553442391468d52c74f34a4efeb9d2aef27366` |
+
+To regenerate these artefacts from scratch, follow the Phase-2 Reproduction workflow above (produces `best_final_exit.pt`), then run the Phase-3 Reproduction workflow above (produces `multi_exit_imagenette.onnx`).
+
+After regeneration, verify SHA-256 integrity:
+
+```powershell
+(Get-FileHash model\artifacts\phase3\multi_exit_imagenette.onnx -Algorithm SHA256).Hash.ToLower()
+# Expected: 0cc08e571383279798c00019f0079bcbc107db49a1fe8efca444a4b754f35051
+```
+
+The full numerical-parity validation record is in `docs/phase3_validation.md`.
