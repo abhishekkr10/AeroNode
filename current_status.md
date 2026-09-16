@@ -53,7 +53,6 @@ Begin Phase 4 by loading the monolithic four-output reference graph in C++ ONNX 
 - Global `cmake`, `ninja`, `make`, `pkg-config`, and `psql` are not on `PATH`; project-local CMake/Ninja are available.
 - A PostgreSQL 18.6 Windows service is running; its client exists under `C:\Program Files\PostgreSQL\18\bin` but is not on `PATH`.
 - Only MSYS2 GCC was discovered; MSVC `cl.exe` and Clang were not on `PATH`.
-- The workspace was not a Git repository at inspection time.
 - PDF text extraction was unavailable through `pdftotext`; all pages were rendered and visually read instead.
 - PyTorch 2.14 warns that the explicitly selected legacy TorchScript ONNX exporter is deprecated. It remains the verified Phase-3 path; migration to the dynamo exporter should be evaluated separately without changing this reference artifact.
 
@@ -106,3 +105,4 @@ Begin Phase 4 by loading the monolithic four-output reference graph in C++ ONNX 
 - 2026-09-16: Exported the accepted best checkpoint, passed full graph/shape validation, and verified all four exits against PyTorch on a class-diverse batch.
 - 2026-09-16: Completed Phase 3 with four passing automated tests and a reproducible validation record.
 - 2026-09-16: Committed the completed Phase-3 exporter, tests, and validation record as `4615a46`.
+- 2026-09-16: Performed full repository audit; verified Phases 0-3 intact, all tests passing, no secrets in history. Renamed branch to `main`, configured `origin` remote to `https://github.com/abhishekkkr10/AeroNode.git`, hardened `.gitignore`, updated `README.md` and `current_status.md` for accuracy. Committed as `chore: prepare repository for public GitHub release` and pushed to GitHub.

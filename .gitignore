@@ -4,10 +4,17 @@ __pycache__/
 .venv/
 .deps/
 
-# Generated models and benchmark data
+# Generated model artifacts (checkpoints, ONNX exports)
+# These are large generated files (10-100 MB). Reproduce using the commands in README.md.
 model/artifacts/*
 !model/artifacts/.gitkeep
+*.pt
+*.onnx
+
+# Datasets (downloaded via imagenette_data.py --data-root data)
 data/
+
+# Benchmark results
 benchmarks/results/*
 !benchmarks/results/.gitkeep
 
@@ -15,10 +22,21 @@ benchmarks/results/*
 build/
 cmake-build-*/
 
+# Output: generated reports and temporary files
+output/tmp/
+output/scratch/
+tmp/
+
+# Environment and secrets — NEVER commit real credentials
+.env
+.env.*
+!.env.example
+
 # Editors and OS
 .vs/
 *.user
 .DS_Store
+Thumbs.db
 
-# PDF inspection intermediates
-tmp/
+# Logs
+*.log

@@ -6,14 +6,18 @@ The authoritative project brief is `AeroNode_Project_Brief (1).pdf`. See `archit
 
 ## Current Scope
 
-The current milestone is the smallest Phase-1 vertical slice:
+Phases 0–3 are complete. The active milestone is Phase 4:
 
 ```text
-deterministic PyTorch model -> ONNX export -> C++17 ONNX Runtime inference
-                            -> Python/C++ output comparison -> latency measurement
+C++ ONNX Runtime multi-exit integration
+  -> entropy-based early-exit policy
+  -> ZeroMQ IPC (Python PUB / C++ SUB)
+  -> per-exit latency and accuracy measurement
 ```
 
 ZeroMQ control updates, adaptive policy, cross-policy benchmarks, allocator experiments, and telemetry remain subsequent milestones.
+
+Phase 1 established the vertical slice: `PyTorch model → ONNX export → C++17 ONNX Runtime inference → Python/C++ output comparison → latency measurement`.
 
 Phase 2 is now complete: the four-exit PyTorch model was trained on Imagenette and every classifier was independently validated. See `docs/phase2_validation.md` for the recorded metrics. Multi-exit ONNX/C++ integration remains intentionally unimplemented.
 
