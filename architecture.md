@@ -10,7 +10,7 @@ Fixed-depth inference ignores changes in CPU load, thermal pressure, and latency
 
 ## Implementation State
 
-This document separates committed design from implemented behavior. The Phase-1 single-model vertical slice is verified across PyTorch, ONNX, Python ONNX Runtime, and C++ ONNX Runtime. The Phase-2 PyTorch multi-exit model is trained and independently validated at all four heads. Phase 3 exports that checkpoint as a verified monolithic four-output ONNX reference graph. Staged C++ execution, IPC, policy adaptation, full benchmarks, allocator experiments, and telemetry are not yet implemented. `current_status.md` is the source of truth for completed work.
+This document separates committed design from implemented behavior. Phases 0 through 4 are implemented and verified. Phase 1 established the single-model vertical slice. Phase 2 trained and validated the 4-exit backbone. Phase 3 exported and verified the 4-output ONNX reference graph. Phase 4 completed multi-exit C++ ONNX Runtime integration, numerically stable Shannon entropy computation, the Python Control Plane ZeroMQ IPC simulator, the C++ thread-safe state receiver, and the multi-exit early-termination decision engine. Phase 5 (full adaptive policy calibration and staging), Phase 6 (benchmarking), Phase 7 (allocator experiments), and Phase 8 (FastAPI telemetry and PostgreSQL) remain subsequent milestones. `current_status.md` is the source of truth for completed work.
 
 ## High-Level Architecture
 

@@ -6,22 +6,23 @@ The authoritative project brief is `AeroNode_Project_Brief (1).pdf`. See `archit
 
 ## Current Scope
 
-Phases 0–3 are complete. The active milestone is Phase 4:
+Phases 0–4 are complete. The upcoming milestone is Phase 5 (Adaptive Policy Calibration & Stage Budgeting):
 
 ```text
-C++ ONNX Runtime multi-exit integration
-  -> entropy-based early-exit policy
-  -> ZeroMQ IPC (Python PUB / C++ SUB)
-  -> per-exit latency and accuracy measurement
+Phases 0-4 Complete:
+  Multi-exit ResNet-18 model trained (Phase 2)
+  Four-output ONNX model exported & verified (Phase 3)
+  C++17 ONNX Runtime multi-exit integration (Phase 4)
+  Numerically stable Shannon entropy calculation (Phase 4)
+  Python Control Plane ZeroMQ IPC simulator (Phase 4)
+  Thread-safe C++ StateReceiver snapshot & TTL staleness fallback (Phase 4)
+  Multi-exit early-termination decision engine (Phase 4)
+
+Upcoming Phase 5:
+  Adaptive policy calibration -> stage budgeting -> multi-exit benchmarks
 ```
 
-ZeroMQ control updates, adaptive policy, cross-policy benchmarks, allocator experiments, and telemetry remain subsequent milestones.
-
-Phase 1 established the vertical slice: `PyTorch model → ONNX export → C++17 ONNX Runtime inference → Python/C++ output comparison → latency measurement`.
-
-Phase 2 is now complete: the four-exit PyTorch model was trained on Imagenette and every classifier was independently validated. See `docs/phase2_validation.md` for the recorded metrics. Multi-exit ONNX/C++ integration remains intentionally unimplemented.
-
-Phase 3 exports the accepted checkpoint as a dynamic-batch, four-output ONNX reference graph and verifies every exit against PyTorch. See `docs/phase3_validation.md`. C++ early-exit execution remains intentionally unimplemented.
+Phase 4 integrates the four-output ONNX model with C++17 ONNX Runtime, ZeroMQ IPC, and an early-termination decision engine. See `docs/phase4_validation.md` for the complete validation record. Adaptive policy calibration, cross-policy benchmarks, allocator experiments, and telemetry remain subsequent milestones.
 
 ## Repository Layout
 

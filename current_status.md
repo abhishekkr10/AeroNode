@@ -36,17 +36,24 @@
 - Embedded source checkpoint hash/epoch, dataset hash, class mapping, loss weights, and image size in ONNX metadata.
 - Completed the full Phase-3 regression suite: four tests passed, covering multi-exit shapes/supervision/loss validation plus ONNX four-output structure and parity.
 
+- Completed Phase 4 Milestone 1: Updated C++ runtime to dynamically handle both Phase-1 synthetic models and the Phase-3 four-output multi-exit model. Verified tensor names, shapes [batch, 10], dynamic batching, and numerical parity against Python ONNX Runtime on the 10-class validation batch with maximum absolute error 5.96e-08 across all four exits.
+- Completed Phase 4 Milestone 2: Implemented numerically stable C++ Softmax, confidence, and Shannon entropy computation in `runtime/include/entropy.hpp` using log-sum-exp formulation. Validated uniform (ln 10), peaked, extreme positive, extreme negative, and arbitrary distributions with automated C++ test suite `tests/test_entropy.cpp`. Integrated entropy and confidence reporting into multi-exit predictions.
+- Completed Phase 4 Milestone 3: Installed `pyzmq 27.2.0` and pinned it in `requirements-phase4.txt`. Implemented `control_plane/simulator.py` supporting schema version 1 `RuntimeState` generation, boundary validation, configurable scenarios (`normal`, `thermal_throttle`, `strict_deadline`, `dynamic`), and ZeroMQ PUB broadcasting. Added automated unit tests `tests/test_control_plane.py` (4/4 passed) verifying serialization, boundary validation, scenario clamping, and ZeroMQ loopback reception.
+- Completed Phase 4 Milestone 4: Installed MSYS2 UCRT64 ZeroMQ, cppzmq, and nlohmann-json. Implemented `runtime/include/runtime_state.hpp` and `runtime/include/state_receiver.hpp` with non-blocking background thread, atomic stop token, mutex-protected latest-state snapshot, schema and range validation, malformed/out-of-order drop tracking, and TTL staleness fallback. Added automated test suite `tests/test_state_receiver.cpp` (3/3 passed).
+- Completed Phase 4 Milestone 5: Implemented early-exit decision rules in `runtime/include/exit_decision.hpp` balancing entropy against latency budget and resource pressure. Integrated `StateReceiver` and decision engine into `aeronode_runtime` CLI with structured execution telemetry and manual overrides. Added unit test `tests/test_exit_decision.cpp` (4/4 passed) and end-to-end integration test `tests/test_phase4_integrated.py` (4/4 passed).
+- Completed Phase 4 Milestone 6: Verified all 25 automated tests across Phases 1–4 with 100% pass rate. Documented Phase 4 verification in `docs/phase4_validation.md` and updated `architecture.md`.
+
 ## In Progress
 
-- No implementation task is active; Phase 3 is complete and no C++ early-exit, ZeroMQ, or adaptive-policy work has started.
+- None; Phase 4 is complete. Ready for Phase 5 (Adaptive Policy Calibration).
 
 ## Blocked
 
-- ZeroMQ is not available yet; it is not needed until the IPC phase.
+- None.
 
 ## Next Step
 
-Begin Phase 4 by loading the monolithic four-output reference graph in C++ ONNX Runtime and verifying all logits against the Phase-3 reference; do not add adaptive early-exit behavior yet.
+Begin Phase 5: Calibrate per-exit entropy thresholds on held-out validation data and develop the adaptive constraint-to-budget mapping function.
 
 ## Known Issues
 
@@ -107,3 +114,9 @@ Begin Phase 4 by loading the monolithic four-output reference graph in C++ ONNX 
 - 2026-09-16: Committed the completed Phase-3 exporter, tests, and validation record as `4615a46`.
 - 2026-09-16: Performed full repository audit; verified Phases 0-3 intact, all tests passing, no secrets in history. Renamed branch to `main`, configured `origin` remote to `https://github.com/abhishekkr10/AeroNode.git`, hardened `.gitignore`, updated `README.md` and `current_status.md` for accuracy. Committed as `chore: prepare repository for public GitHub release`.
 - 2026-09-17: Added "Generated Artifacts" section to `README.md` documenting explicit exclusion rationale for `multi_exit_imagenette.onnx` (~10.7 MiB) and `best_final_exit.pt` (~21.5 MiB): binary blobs are deterministically reproducible from source; size would bloat history. SHA-256 checksums and regeneration workflow recorded for future developers. Phase 2 + 3 test suite confirmed 4/4 passing. Pushed `main` to `https://github.com/abhishekkr10/AeroNode.git`.
+- 2026-09-17: Completed Phase 4 Milestone 1: Updated C++ runtime to support multi-exit ONNX models and dynamic batching while preserving Phase 1 backwards compatibility. Verified tensor names, shapes [batch, 10], and exact numerical parity against Python ONNX Runtime across all four exits on the 10-class validation batch (max absolute error 5.96e-08).
+- 2026-09-17: Completed Phase 4 Milestone 2: Implemented numerically stable C++ softmax, confidence, and Shannon entropy in `runtime/include/entropy.hpp` with log-sum-exp formulation. Validated 5/5 test cases in `tests/test_entropy.cpp` (uniform, peaked, extreme ranges, known distributions) and integrated per-exit confidence/entropy reporting into `aeronode_runtime`.
+- 2026-09-17: Completed Phase 4 Milestone 3: Installed `pyzmq 27.2.0`, added `requirements-phase4.txt`, implemented `control_plane/simulator.py` (version 1 schema, ZeroMQ PUB broadcasting, configurable scenarios), and added `tests/test_control_plane.py` (4/4 passing unit tests covering serialization, validation boundaries, scenario generation, and ZeroMQ loopback reception).
+- 2026-09-17: Completed Phase 4 Milestone 4: Configured ZeroMQ, cppzmq, and nlohmann-json in CMake. Implemented `runtime/include/runtime_state.hpp` and `runtime/include/state_receiver.hpp` with background receiver thread, atomic shutdown, thread-safe snapshot storage, input validation, drop counters, and TTL staleness fallback. Passed all 3 automated tests in `tests/test_state_receiver.cpp`.
+- 2026-09-17: Completed Phase 4 Milestone 5: Implemented `runtime/include/exit_decision.hpp` with sequential exit evaluation and deterministic reason codes. Wired `StateReceiver` and decision engine into `aeronode_runtime` CLI with structured execution telemetry and manual overrides. Passed all 4 unit tests in `tests/test_exit_decision.cpp` and all 4 end-to-end integration tests in `tests/test_phase4_integrated.py`.
+- 2026-09-17: Completed Phase 4 Milestone 6: Executed full repository regression test suite (25/25 passed across all phases). Documented Phase 4 verification in `docs/phase4_validation.md`, updated `architecture.md`, and marked Phase 4 complete.
