@@ -11,6 +11,7 @@ Verifies:
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -29,7 +30,7 @@ from control_plane.simulator import (
     ZeroMQStatePublisher,
 )
 
-EXECUTABLE = PROJECT_ROOT / "build" / "runtime" / "aeronode_runtime.exe"
+EXECUTABLE = Path(os.environ.get("AERONODE_RUNTIME_EXECUTABLE", str(PROJECT_ROOT / "build" / "runtime" / "aeronode_runtime.exe")))
 MODEL_PATH = PROJECT_ROOT / "model" / "artifacts" / "phase3" / "multi_exit_imagenette.onnx"
 TEST_IPC_ENDPOINT = "tcp://127.0.0.1:5566"
 

@@ -10,7 +10,7 @@ Fixed-depth inference ignores changes in CPU load, thermal pressure, and latency
 
 ## Implementation State
 
-This document separates committed design from implemented behavior. Phases 0 through 4 are implemented and verified. Phase 1 established the single-model vertical slice. Phase 2 trained and validated the 4-exit backbone. Phase 3 exported and verified the 4-output ONNX reference graph. Phase 4 completed multi-exit C++ ONNX Runtime integration, numerically stable Shannon entropy computation, the Python Control Plane ZeroMQ IPC simulator, the C++ thread-safe state receiver, and the multi-exit early-termination decision engine. Phase 5 (full adaptive policy calibration and staging), Phase 6 (benchmarking), Phase 7 (allocator experiments), and Phase 8 (FastAPI telemetry and PostgreSQL) remain subsequent milestones. `current_status.md` is the source of truth for completed work.
+Phases 1–5E are implemented and verified. Phases 1–4 established the vertical slice, multi-exit model, monolithic ONNX reference, entropy calculation, ZeroMQ simulator/receiver, and exit policy. Phase 5A exports separate stage graphs; 5B verifies their parity; 5C provides persistent C++ sessions and explicit buffers; 5D executes these sessions sequentially and proves downstream stage skipping. Phase 5E measures the full-validation CPU baseline comparison, recorded in `docs/phase5e_validation.md`. Threshold calibration, allocator experiments, and telemetry remain subsequent milestones. `current_status.md` records completed work.
 
 ## High-Level Architecture
 
@@ -72,7 +72,11 @@ No IPC occurs between neural-network layers.
 
 The runtime is C++17 and built with CMake. Phase 1 uses one `Ort::Session`, validates tensor names/shapes/types, executes a deterministic input, returns logits, and records warm-up-separated steady-state latency.
 
-Standard ONNX Runtime cannot generally pause and resume an optimized graph. The multi-exit implementation will therefore use separately exported, benchmarkable stage models. A stage consumes either the original input or the preceding stage's feature tensor and produces both the next feature tensor and exit logits. The runtime owns stage sessions and invokes only as many as policy permits. This avoids unsupported graph mutation and makes per-stage cost measurable, at the cost of session boundaries and intermediate tensor movement.
+Standard ONNX Runtime cannot generally pause and resume an optimized graph. The runtime uses four separately exported stage models. A stage consumes the original input or the preceding stage's feature tensor and produces exit logits plus the next feature tensor (except Stage 4, which only returns logits). `StagedInferenceEngine::Infer` invokes each persistent session, validates tensor type/shape/count and finite values, then evaluates the existing Phase-4 policy. Returning at an intermediate exit prevents any downstream session invocation.
+
+At each continuing boundary, the engine copies the ORT-owned feature tensor into `feat_1`, `feat_2`, or `feat_3`, then constructs a fresh input `Ort::Value` wrapping that vector. No session-owned `Ort::Value` crosses the boundary. A request mutex serializes `Infer` and `WarmUp`; results own their logits and traces. The retained Phase-5C raw session/buffer APIs require external synchronization and callers must not resize a buffer while a borrowed tensor is alive.
+
+For a batch, every sample receives the existing policy evaluation at the current stage. The batch returns one common exit only when all samples permit exiting there; otherwise the entire batch continues. Phase 5D does not compact batches or freeze individual samples at different exits. One RuntimeState snapshot is used for the request. Elapsed time is used only by the existing deadline rule, with its unchanged stage estimate; no staged timing benchmark is emitted.
 
 Phase 3 intentionally adds a distinct reference representation before staged execution: one opset-17 ONNX graph with input `input` shaped `[batch_size, 3, 128, 128]` and outputs `exit_1_logits` through `exit_4_logits`, each shaped `[batch_size, 10]`. It proves checkpoint provenance, graph validity, output preservation, dynamic-batch behavior, and PyTorch/ONNX numerical fidelity. It is suitable for the next C++ phase's full-graph multi-output baseline, but it cannot save compute merely by requesting an early output because ONNX Runtime may still execute the shared graph. Separate stage graphs remain the planned later execution representation. This clarifies two artifact roles rather than replacing the staged architecture.
 
@@ -193,11 +197,11 @@ Dependencies will be isolated/pinned after compatibility is verified; no global 
 
 ## Known Limitations
 
-- ZeroMQ is not installed and remains a prerequisite for the later IPC phase.
+- ZeroMQ is configured and verified in Phase 4 and in the Phase-5D staged CLI integration test; its local binaries remain an environment prerequisite.
 - The project-local Phase-1 dependencies and official ONNX Runtime 1.30.0 SDK are intentionally not committed; setup remains platform-specific until a bootstrap script is added.
 - The official ONNX Runtime 1.30.0 Windows import library links and runs with MSYS2 GCC 15.2 for the current C-API-backed wrapper usage, but broader ABI compatibility will be rechecked as runtime features grow.
 - Five CPU epochs establish prototype behavior but are not a converged accuracy study; loss-weight/epoch calibration remains future experimental work.
-- Entropy thresholds, stage-boundary overhead, and adaptive-policy behavior are not known yet.
+- Current entropy thresholds are uncalibrated. CPU implementation comparisons are measured in Phase 5E; they include validation, copying and policy costs. Other hardware, energy, thermal effects and isolated stage-boundary overhead remain unmeasured.
 - The Phase-3 monolithic ONNX graph exposes all exits but does not itself guarantee compute savings when an early output is requested.
 - Netron is not installed; ONNX checker, strict shape inference, operator inventory, metadata inspection, and ONNX Runtime execution provide the recorded reproducible inspection.
 - Temperature is simulated unless a portable hardware sensor source is added later.

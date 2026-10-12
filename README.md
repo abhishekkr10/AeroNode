@@ -4,9 +4,11 @@ AeroNode is an experimental C++ edge-AI runtime that will select neural-network 
 
 The authoritative project brief is `AeroNode_Project_Brief (1).pdf`. See `architecture.md` for the actual design and `current_status.md` for what is implemented now.
 
+User-confirmed repository: https://github.com/abhishekkr10/AeroNode
+
 ## Current Scope
 
-Phases 0–4 are complete. The upcoming milestone is Phase 5 (Adaptive Policy Calibration & Stage Budgeting):
+Phases 1–5E are complete. Phase 5D implements functional sequential staged inference with explicit tensor copies and verified early-exit stage skipping. Phase 5E adds a reproducible full-validation CPU baseline comparison. See [Phase 5D validation](docs/phase5d_validation.md) and [Phase 5E measurements](docs/phase5e_validation.md) for commands, evidence, and limitations.
 
 ```text
 Phases 0-4 Complete:
@@ -18,11 +20,18 @@ Phases 0-4 Complete:
   Thread-safe C++ StateReceiver snapshot & TTL staleness fallback (Phase 4)
   Multi-exit early-termination decision engine (Phase 4)
 
-Upcoming Phase 5:
-  Adaptive policy calibration -> stage budgeting -> multi-exit benchmarks
+Completed Phase 5:
+  5A: Four independently exported ONNX stage models
+  5B: Python staged parity against monolithic ONNX and PyTorch
+  5C: Persistent C++ sessions, metadata checks, warmup, explicit buffers
+  5D: Sequential C++ execution with early-exit skipping and parity validation
+  5E: Measured CPU baseline comparison over the full validation split
+
+Remaining roadmap:
+  Threshold calibration and held-out evaluation, allocator experiments, telemetry
 ```
 
-Phase 4 integrates the four-output ONNX model with C++17 ONNX Runtime, ZeroMQ IPC, and an early-termination decision engine. See `docs/phase4_validation.md` for the complete validation record. Adaptive policy calibration, cross-policy benchmarks, allocator experiments, and telemetry remain subsequent milestones.
+Phase 4 integrates the four-output ONNX model with C++17 ONNX Runtime, ZeroMQ IPC, and an exit-decision engine. Its monolithic graph evaluates every output before making a decision. Phase 5D invokes separate sessions only as needed: each completed stage evaluates that same policy, then either returns owned logits or copies the feature tensor into the next stage's vector buffer. Thresholds remain uncalibrated; Phase 5D makes no performance claim.
 
 ## Repository Layout
 

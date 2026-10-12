@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -21,15 +22,18 @@
 #include "exit_decision.hpp"
 #include "runtime_state.hpp"
 #include "state_receiver.hpp"
+#include "staged_model_runner.hpp"
 
 namespace {
 
 struct Options {
   std::string model_path;
+  std::string staged_dir;
   std::string input_bin_path;
   std::string ipc_endpoint;
   int iterations = 100;
   int batch_size = 1;
+  bool iterations_supplied = false;
 
   // Manual override options (used if no live IPC endpoint is specified)
   bool has_manual_overrides = false;
@@ -61,8 +65,11 @@ Options ParseOptions(int argc, char* argv[]) {
     const std::string argument = argv[index];
     if (argument == "--model" && index + 1 < argc) {
       options.model_path = argv[++index];
+    } else if (argument == "--staged-dir" && index + 1 < argc) {
+      options.staged_dir = argv[++index];
     } else if (argument == "--iterations" && index + 1 < argc) {
       options.iterations = std::stoi(argv[++index]);
+      options.iterations_supplied = true;
     } else if (argument == "--input-bin" && index + 1 < argc) {
       options.input_bin_path = argv[++index];
     } else if (argument == "--batch-size" && index + 1 < argc) {
@@ -85,14 +92,17 @@ Options ParseOptions(int argc, char* argv[]) {
       options.entropy_thresholds = ParseThresholds(argv[++index]);
     } else {
       throw std::invalid_argument(
-          "Usage: aeronode_runtime --model <path> [--iterations N] [--batch-size N] "
+          "Usage: aeronode_runtime (--model <path> | --staged-dir <path>) [--iterations N] [--batch-size N] "
           "[--input-bin <path>] [--ipc-endpoint <ep>] [--cpu-load N] [--temperature N] "
           "[--latency-budget N] [--resource-pressure N] [--entropy-thresholds t1,t2,t3,t4]");
     }
   }
-  if (options.model_path.empty() || options.iterations <= 0 || options.batch_size <= 0) {
+  if (options.model_path.empty() == options.staged_dir.empty() || options.iterations <= 0 || options.batch_size <= 0) {
     throw std::invalid_argument(
-        "Usage: aeronode_runtime --model <path> [--iterations N] [--batch-size N] ...");
+        "Usage: aeronode_runtime (--model <path> | --staged-dir <path>) [--iterations N] [--batch-size N] ...");
+  }
+  if (!options.staged_dir.empty() && options.iterations_supplied && options.iterations != 1) {
+    throw std::invalid_argument("Phase 5D staged mode executes one request; --iterations must be 1");
   }
   return options;
 }
@@ -139,6 +149,20 @@ std::vector<float> LoadBinaryFloats(const std::string& path, std::size_t expecte
   return data;
 }
 
+aeronode::RuntimeState GetStateSnapshot(const Options& options, aeronode::StateReceiver* receiver) {
+  if (receiver != nullptr) return receiver->GetLatestSnapshot();
+  if (!options.has_manual_overrides) return aeronode::RuntimeState::ConservativeDefault();
+  aeronode::RuntimeState state;
+  state.sequence = 1;
+  state.timestamp_unix_ms = static_cast<std::int64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::system_clock::now().time_since_epoch()).count());
+  state.cpu_load = options.cpu_load;
+  state.temperature_c = options.temperature_c;
+  state.latency_budget_ms = options.latency_budget_ms;
+  state.resource_pressure = options.resource_pressure;
+  return state;
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -152,6 +176,47 @@ int main(int argc, char* argv[]) {
       state_receiver->Start();
       // Allow connection & initial state delivery to arrive
       std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
+
+    if (!options.staged_dir.empty()) {
+      aeronode::StagedEngineConfig config;
+      for (std::size_t i = 0; i < 4; ++i) {
+        config.stage_model_paths[i] = (std::filesystem::u8path(options.staged_dir) /
+            ("stage_" + std::to_string(i + 1) + ".onnx")).u8string();
+      }
+      aeronode::StagedInferenceEngine engine(config);
+      const auto count = static_cast<std::size_t>(options.batch_size) * 3 * 128 * 128;
+      if (options.input_bin_path.empty()) {
+        throw std::invalid_argument("Staged mode requires --input-bin containing preprocessed float32 images");
+      }
+      const auto input = LoadBinaryFloats(options.input_bin_path, count);
+      const auto state = GetStateSnapshot(options, state_receiver.get());
+      aeronode::ExitPolicyConfig policy_config;
+      policy_config.entropy_thresholds = options.entropy_thresholds;
+      const auto result = engine.Infer(input, {options.batch_size, 3, 128, 128}, state,
+                                        aeronode::ExitDecisionEngine(policy_config));
+      nlohmann::json report = {{"mode", "staged"}, {"selected_exit", result.selected_exit},
+          {"shape", result.output_shape}, {"logits", result.logits},
+          {"stage_run_counts", result.stage_run_counts}, {"stages", nlohmann::json::array()},
+          {"runtime_state", {{"schema_version", state.schema_version}, {"sequence", state.sequence},
+            {"timestamp_unix_ms", state.timestamp_unix_ms}, {"is_stale", state.is_stale},
+            {"cpu_load", state.cpu_load}, {"temperature_c", state.temperature_c},
+            {"latency_budget_ms", state.latency_budget_ms}, {"resource_pressure", state.resource_pressure}}}};
+      for (const auto& stage : result.stages) {
+        nlohmann::json evaluations = nlohmann::json::array();
+        for (const auto& evaluation : stage.sample_evaluations) {
+          evaluations.push_back({{"exit_index", evaluation.exit_index}, {"action", evaluation.action},
+              {"reason", aeronode::ToString(evaluation.reason)}, {"entropy", evaluation.entropy},
+              {"confidence", evaluation.confidence}, {"predicted_class", evaluation.predicted_class},
+              {"threshold_used", evaluation.threshold_used}});
+        }
+        report["stages"].push_back({{"stage_index", stage.stage_index}, {"input_shape", stage.input_shape},
+            {"output_shapes", stage.output_shapes}, {"copied_feature_elements", stage.copied_feature_elements},
+            {"sample_evaluations", evaluations}});
+      }
+      std::cout << report.dump(2) << '\n';
+      if (state_receiver) state_receiver->Stop();
+      return EXIT_SUCCESS;
     }
 
     Ort::Env environment(ORT_LOGGING_LEVEL_WARNING, "aeronode");
@@ -176,7 +241,8 @@ int main(int argc, char* argv[]) {
 
     const auto input_name_ptr = session.GetInputNameAllocated(0, allocator);
     const std::string input_name = input_name_ptr.get();
-    const auto input_info = session.GetInputTypeInfo(0).GetTensorTypeAndShapeInfo();
+    const auto input_type_owner = session.GetInputTypeInfo(0);
+    const auto input_info = input_type_owner.GetTensorTypeAndShapeInfo();
     const std::vector<std::int64_t> raw_input_shape = input_info.GetShape();
 
     // Collect output names and shapes
@@ -288,24 +354,7 @@ int main(int argc, char* argv[]) {
     run_multi_exit();  // Warm-up iteration
 
     // Acquire RuntimeState snapshot: consistent snapshot used for request decisions
-    aeronode::RuntimeState state_snapshot;
-    if (state_receiver) {
-      state_snapshot = state_receiver->GetLatestSnapshot();
-    } else if (options.has_manual_overrides) {
-      state_snapshot.schema_version = 1;
-      state_snapshot.sequence = 1;
-      state_snapshot.timestamp_unix_ms = static_cast<std::int64_t>(
-          std::chrono::duration_cast<std::chrono::milliseconds>(
-              std::chrono::system_clock::now().time_since_epoch())
-              .count());
-      state_snapshot.cpu_load = options.cpu_load;
-      state_snapshot.temperature_c = options.temperature_c;
-      state_snapshot.latency_budget_ms = options.latency_budget_ms;
-      state_snapshot.resource_pressure = options.resource_pressure;
-      state_snapshot.is_stale = false;
-    } else {
-      state_snapshot = aeronode::RuntimeState::ConservativeDefault();
-    }
+    const auto state_snapshot = GetStateSnapshot(options, state_receiver.get());
 
     std::vector<double> latency_ms;
     latency_ms.reserve(static_cast<std::size_t>(options.iterations));

@@ -43,9 +43,16 @@
 - Completed Phase 4 Milestone 5: Implemented early-exit decision rules in `runtime/include/exit_decision.hpp` balancing entropy against latency budget and resource pressure. Integrated `StateReceiver` and decision engine into `aeronode_runtime` CLI with structured execution telemetry and manual overrides. Added unit test `tests/test_exit_decision.cpp` (4/4 passed) and end-to-end integration test `tests/test_phase4_integrated.py` (4/4 passed).
 - Completed Phase 4 Milestone 6: Verified all 25 automated tests across Phases 1–4 with 100% pass rate. Documented Phase 4 verification in `docs/phase4_validation.md` and updated `architecture.md`.
 
+- Verified the existing Phase-5A stage exports, manifest and model contracts (4 Python tests), Phase-5B staged/monolithic/PyTorch parity (5 Python tests), and Phase-5C C++ persistent-session/buffer infrastructure (5 C++ tests).
+- Completed Phase 5D: Added sequential staged C++ inference with validated explicit-copy boundaries and immediate early-exit returns. Reused the Phase-4 policy rules through an incremental evaluation API and retained the existing control-plane architecture.
+- Verified every forced exit for batches 1, 3 and 5 with actual session Run counters; all four exits matched monolithic C++ and Python ONNX outputs with maximum absolute error 0 and identical argmax classes. Deliberately failing downstream sessions were skipped successfully by Exit 1.
+- Added 54 focused Phase-5D C++ cases and 11 staged CLI integration cases, including live ZeroMQ snapshot reception. All 103 unit/integration cases and both existing Phase-1/4 verification scripts passed. Clean Release C++ build completed without compiler warnings or errors. Reproduction, safety limits, and detailed results are in `docs/phase5d_validation.md`.
+
+- Completed Phase 5E: Full-split native CPU baseline benchmark, deterministic paired measurement harness, raw records and source/model provenance. All 111 C++/Python cases and both existing verification scripts pass; clean Release compilation is warning-free. See `docs/phase5e_validation.md`.
+
 ## In Progress
 
-- None; Phase 4 is complete. Ready for Phase 5 (Adaptive Policy Calibration).
+- Continuing the user-authorized remaining roadmap: threshold calibration, allocator experiments, and telemetry integration.
 
 ## Blocked
 
@@ -53,7 +60,7 @@
 
 ## Next Step
 
-Begin Phase 5: Calibrate per-exit entropy thresholds on held-out validation data and develop the adaptive constraint-to-budget mapping function.
+Phase 5E+ remains planned: hardware benchmarking, threshold calibration, baseline comparisons, allocator experiments, and telemetry. No later-phase implementation was added in Phase 5D.
 
 ## Known Issues
 
@@ -86,7 +93,7 @@ Begin Phase 5: Calibrate per-exit entropy thresholds on held-out validation data
 - Project-local ML stack: PyTorch 2.14.0, torchvision 0.29.0, ONNX 1.22.0, ONNX Runtime 1.30.0, NumPy 2.5.3, and Pillow 12.3.0.
 - Phase-2 vision dependencies: torchvision 0.29.0 and Pillow 12.3.0 in `.venv`.
 - ONNX Runtime C++ SDK: official Windows x64 1.30.0, project-local under ignored `.deps`.
-- ZeroMQ / pyzmq: not discovered.
+- ZeroMQ / pyzmq: MSYS2 UCRT64 libzmq/cppzmq and project-local pyzmq are configured and pass the Phase-4 and staged CLI integration tests.
 - FastAPI: 0.141.1; Uvicorn 0.52.4.
 - PostgreSQL: server/client 18.6; `postgresql-x64-18` service running; `psql` not on `PATH`; psycopg 3.3.4 and psycopg2-binary 2.9.12 installed globally.
 - Testing: global pytest 9.1.1; project-local NumPy 2.5.3.
@@ -94,6 +101,10 @@ Begin Phase 5: Calibrate per-exit entropy thresholds on held-out validation data
 - Git: 2.53.0.windows.2; configured user identity exists; workspace initially not initialized as a repository.
 
 ## Recent Changes
+
+- 2026-10-12: Completed Phase 5E native CPU benchmark and full-validation baseline comparison: 70,650 paired requests, all 3,925 validation images, six modes and three repetitions. All outputs passed parity. Measured current-policy accuracy 72.8917% and mean latency 2.3953 ms versus monolithic 73.0955% and 3.0125 ms in this experiment. Source and scope are documented in `docs/phase5e_validation.md`. Confirmed publishing destination is https://github.com/abhishekkr10/AeroNode.
+
+- 2026-10-12: Completed Phase-5D functional staged inference, explicit-copy tensor chaining, early-exit stage-skipping proof, numerical parity, error handling, clean build, and full regression validation. No benchmark or threshold calibration was performed; existing uncommitted Phase-5A/B/C work was preserved.
 
 - 2026-09-16: Completed authoritative PDF review and read-only environment inspection.
 - 2026-09-16: Created initial architecture and status documentation.
