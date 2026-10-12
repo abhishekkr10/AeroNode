@@ -61,12 +61,15 @@ struct ExitPolicyConfig {
   float pressure_threshold = 0.80F;          // Above this, trigger aggressive exit
   float pressure_entropy_slack = 0.30F;      // Relaxed entropy allowance under pressure
   float stage_latency_estimate_ms = 3.0F;    // Estimated ms per stage for deadline projection
+  std::string source_checkpoint_sha256;     // Optional binding for calibrated artifacts.
 };
 
 class ExitDecisionEngine {
  public:
   explicit ExitDecisionEngine(ExitPolicyConfig config = ExitPolicyConfig{})
       : config_(config) {}
+
+  const std::string& SourceCheckpointSha256() const noexcept { return config_.source_checkpoint_sha256; }
 
   // Incremental evaluation for the four-stage execution engine. An available
   // intermediate head is not the final head merely because later logits have

@@ -10,7 +10,7 @@ Fixed-depth inference ignores changes in CPU load, thermal pressure, and latency
 
 ## Implementation State
 
-Phases 1–5E are implemented and verified. Phases 1–4 established the vertical slice, multi-exit model, monolithic ONNX reference, entropy calculation, ZeroMQ simulator/receiver, and exit policy. Phase 5A exports separate stage graphs; 5B verifies their parity; 5C provides persistent C++ sessions and explicit buffers; 5D executes these sessions sequentially and proves downstream stage skipping. Phase 5E measures the full-validation CPU baseline comparison, recorded in `docs/phase5e_validation.md`. Threshold calibration, allocator experiments, and telemetry remain subsequent milestones. `current_status.md` records completed work.
+The experimental MVP is implemented and verified through Phase 8. Phases 1–4 established training, the reference graph/runtime, entropy, policy and ZeroMQ snapshots. Phases 5A–5D implement verified staged execution; 5E measures CPU baselines; 5F fits and separately evaluates an opt-in model-bound threshold configuration. Phase 6 compares full/static/adaptive controlled scenarios; Phase 7 measures supported ORT allocator options; Phase 8 stores/replays telemetry through local FastAPI/PostgreSQL. `docs/roadmap_completion.md` links the evidence and explicit limits. `current_status.md` records the current state.
 
 ## High-Level Architecture
 
@@ -105,7 +105,7 @@ The accepted Phase-2 prototype was trained from scratch for five epochs with SGD
 
 For logits `z`, the runtime computes a numerically stable softmax and Shannon entropy `H = -sum(p_i * log(p_i))`. Confidence is `max(p_i)`. Unit tests will cover normalized, uniform, peaked, and extreme-logit cases.
 
-The static baseline exits when entropy is below a calibrated threshold. The adaptive policy will map RuntimeState to an allowable stage budget and combine that budget with calibrated per-exit entropy thresholds. Thresholds will be selected on held-out data; they are not universal constants. Every decision will record its reason, considered threshold, state snapshot, and whether a deadline was met.
+The static baseline uses entropy thresholds with generous resources. The adaptive runtime preserves the Phase-4 confidence/deadline/resource-pressure rules, including its existing stage estimate. An optional model-bound configuration contains thresholds selected solely on a calibration subset, then evaluated separately. The compiled defaults remain unchanged. Every benchmark decision records the selected exit/reason, state scope, execution counters and deadline outcome. The heuristic does not guarantee hard deadlines; the controlled 1-ms experiment records actual misses.
 
 ## Threading Model and Message Flow
 
@@ -126,7 +126,7 @@ One reproducible harness will evaluate the same samples and preprocessing under 
 
 ## Telemetry Architecture, FastAPI, and PostgreSQL
 
-Telemetry is a supporting phase after the benchmark pipeline works. FastAPI will expose current state and recent inference measurements; it will not participate in inference decisions. PostgreSQL will store timestamped runtime states, inference measurements, benchmark runs, and configuration metadata. Writes will be asynchronous/batched so database latency is excluded from inference timing. The initial implementation will not create database objects.
+The local FastAPI service exposes benchmark runs, recent inference measurements and source-scoped RuntimeState records. PostgreSQL stores provenance and timestamped records in project-namespaced tables initialized from `api/schema.sql`. C++ writes a persisted JSONL outbox outside request timers; a separate uploader batches these records after inference. Database/HTTP work does not participate in decisions or measured request latency. Idempotent keys support replay, while conflicting content rolls back the batch. Real integration validation uses isolated project-local PostgreSQL clusters, leaving existing services/data unchanged.
 
 ## Build Architecture and Repository Structure
 
@@ -166,8 +166,9 @@ Only files required by the current vertical slice are created. CMake discovers O
 - `model/training/evaluate_multi_exit.py`: checkpoint-reload validation of every exit.
 - `runtime/src/main.cpp`: CLI model loading, inference, logits output, and latency summary.
 - root/runtime CMake files: portable C++17 target and explicit ONNX Runtime dependency validation.
-- Future `control_plane`: RuntimeState publisher and policy experiment inputs.
-- Future `benchmarks`: dataset/policy orchestration and raw result aggregation.
+- `control_plane`: existing RuntimeState publisher; C++ receiver owns its socket and snapshots.
+- `benchmarks`: native measurements, deterministic data preparation, threshold fitting, scenario/allocator studies and validated aggregation.
+- `api`: local FastAPI/PostgreSQL storage, validated batched replay and isolated real-service validation.
 
 The Phase-1 runtime CLI contract is `aeronode_runtime --model <path> [--iterations N]`; it emits machine-readable result fields after successful execution.
 
@@ -201,7 +202,7 @@ Dependencies will be isolated/pinned after compatibility is verified; no global 
 - The project-local Phase-1 dependencies and official ONNX Runtime 1.30.0 SDK are intentionally not committed; setup remains platform-specific until a bootstrap script is added.
 - The official ONNX Runtime 1.30.0 Windows import library links and runs with MSYS2 GCC 15.2 for the current C-API-backed wrapper usage, but broader ABI compatibility will be rechecked as runtime features grow.
 - Five CPU epochs establish prototype behavior but are not a converged accuracy study; loss-weight/epoch calibration remains future experimental work.
-- Current entropy thresholds are uncalibrated. CPU implementation comparisons are measured in Phase 5E; they include validation, copying and policy costs. Other hardware, energy, thermal effects and isolated stage-boundary overhead remain unmeasured.
+- Compiled entropy thresholds remain unchanged; a curated, model-bound configuration is calibrated for the controlled normal state. CPU comparisons include validation, copying and policy costs. Other hardware, energy, physical thermal effects and isolated stage-boundary overhead remain unmeasured.
 - The Phase-3 monolithic ONNX graph exposes all exits but does not itself guarantee compute savings when an early output is requested.
 - Netron is not installed; ONNX checker, strict shape inference, operator inventory, metadata inspection, and ONNX Runtime execution provide the recorded reproducible inspection.
 - Temperature is simulated unless a portable hardware sensor source is added later.

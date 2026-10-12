@@ -19,6 +19,12 @@ sys.path.insert(0, str(ROOT))
 from benchmarks.summarize_phase5e import summarize
 from model.training.imagenette_data import create_datasets
 
+SCENARIOS = {
+    "normal": {"cpu_load":50.0,"temperature_c":60.0,"latency_budget_ms":30.0,"resource_pressure":0.5},
+    "strict_deadline": {"cpu_load":50.0,"temperature_c":60.0,"latency_budget_ms":1.0,"resource_pressure":0.5},
+    "thermal_pressure": {"cpu_load":92.0,"temperature_c":85.0,"latency_budget_ms":15.0,"resource_pressure":0.95},
+}
+
 
 def sha256(path):
     digest = hashlib.sha256()
@@ -64,7 +70,9 @@ def hardware_metadata():
     return result
 
 
-def run(output_dir, executable, samples=0, repeats=3, warmup=20, seed=20261012, data_root=None):
+def run(output_dir, executable, samples=0, repeats=3, warmup=20, seed=20261012, data_root=None,
+        policy_config=None, selection=None, cpu_arena=True, memory_pattern=True,
+        scenario="normal", include_static=False):
     if repeats <= 0 or warmup <= 0 or seed <= 0:
         raise ValueError("Repeats, warmup, and seed must be positive")
     if sys.byteorder != "little":
@@ -79,6 +87,14 @@ def run(output_dir, executable, samples=0, repeats=3, warmup=20, seed=20261012, 
     torch.set_num_threads(1)
     _, validation = create_datasets(Path(data_root or ROOT / "data/imagenette2-160"), 128)
     indices = select_indices(validation.targets, samples, seed)
+    selection_data = None
+    if selection is not None:
+        selection_data = json.loads(Path(selection).read_text(encoding="utf-8"))
+        indices = selection_data["dataset_indices"]
+        if not indices or len(set(indices)) != len(indices) or any(not 0 <= index < len(validation) for index in indices):
+            raise ValueError("Selection contains invalid or duplicate dataset indices")
+        if selection_data["class_to_idx"] != validation.class_to_idx:
+            raise ValueError("Selection class mapping mismatch")
     manifest = []
     input_path, labels_path = output_dir / "inputs.bin", output_dir / "labels.bin"
     with input_path.open("wb") as destination:
@@ -92,6 +108,10 @@ def run(output_dir, executable, samples=0, repeats=3, warmup=20, seed=20261012, 
     stage_dir = ROOT / "model/artifacts/phase5"
     model = ROOT / "model/artifacts/phase3/multi_exit_imagenette.onnx"
     artifacts = [model, *[stage_dir / f"stage_{i}.onnx" for i in range(1, 5)]]
+    if selection_data is not None:
+        actual = {str(path.relative_to(ROOT)): sha256(path) for path in artifacts}
+        if actual != selection_data["source_artifact_hashes"]:
+            raise ValueError("Selection source model provenance mismatch")
     provenance = {
         "created_utc": datetime.now(timezone.utc).isoformat(), "hardware": hardware_metadata(),
         "validation_set_size": len(validation), "selected_samples": len(indices),
@@ -105,17 +125,30 @@ def run(output_dir, executable, samples=0, repeats=3, warmup=20, seed=20261012, 
         "preprocessing": "Validation Resize(144), CenterCrop(128), ToTensor, ImageNet mean/std normalization",
         "input_format": "little-endian float32 NCHW; native requests use batch 1",
         "timing_scope": "C++ synchronous request including tensor creation, validation, feature/logit copies and prediction metrics; excludes input file I/O, JSON output, preprocessing, session creation and warmup",
-        "order": "Seeded sample shuffle each repetition; rotate the six modes for every paired sample",
+        "order": "Seeded sample shuffle each repetition; rotate every enabled mode for each paired sample",
         "cpu_scope": "Whole measurement loop including file I/O and JSON recording; percent relative to one logical core",
         "memory_scope": "Whole benchmark process peak working set, including all resident stage and reference sessions; not per-mode allocation usage",
         "state_scope": "Controlled normal-state snapshot, not hardware sensor telemetry",
         "calibration": "Current policy defaults are uncalibrated; no threshold fitting is performed",
     }
+    if policy_config is not None:
+        provenance["calibration"] = "Explicit frozen policy file; no threshold fitting during evaluation"
+        provenance["policy_file_sha256"] = sha256(policy_config)
+    provenance["allocator_options"] = {"cpu_mem_arena": cpu_arena, "memory_pattern": memory_pattern}
+    provenance["scenario"] = {"name":scenario,"controlled_state":SCENARIOS[scenario]}
     (output_dir / "manifest.json").write_text(json.dumps(provenance, indent=2), encoding="utf-8")
     command = [str(executable), "--input-bin", str(input_path), "--labels-bin", str(labels_path),
                "--stage-dir", str(stage_dir), "--monolithic-model", str(model),
                "--records", str(output_dir / "records.jsonl"), "--samples", str(len(indices)),
                "--repeats", str(repeats), "--warmup", str(warmup), "--seed", str(seed)]
+    command += ["--cpu-arena", str(int(cpu_arena)), "--memory-pattern", str(int(memory_pattern))]
+    command += ["--include-static",str(int(include_static))]
+    state=SCENARIOS[scenario]
+    for key,field in (("--cpu-load","cpu_load"),("--temperature","temperature_c"),
+                      ("--latency-budget","latency_budget_ms"),("--resource-pressure","resource_pressure")):
+        command += [key,str(state[field])]
+    if policy_config is not None:
+        command += ["--policy-config", str(Path(policy_config).resolve())]
     environment = os.environ.copy()
     if os.name == "nt":
         environment["PATH"] = "C:\\msys64\\ucrt64\\bin;" + environment.get("PATH", "")
@@ -127,7 +160,7 @@ def run(output_dir, executable, samples=0, repeats=3, warmup=20, seed=20261012, 
     if not execution.get("completed"):
         raise RuntimeError("Native benchmark did not complete")
     (output_dir / "execution.json").write_text(json.dumps(execution, indent=2), encoding="utf-8")
-    summary = summarize(output_dir / "records.jsonl", len(indices), repeats)
+    summary = summarize(output_dir / "records.jsonl", len(indices), repeats, policy_config is not None,include_static)
     summary["execution"] = execution
     summary["hardware"] = provenance["hardware"]
     (output_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
@@ -137,7 +170,7 @@ def run(output_dir, executable, samples=0, repeats=3, warmup=20, seed=20261012, 
         exits = ", ".join(str(entry["exit_distribution"].get(str(i), 0)) for i in range(1, 5))
         lines.append(f"| {mode} | {entry['accuracy_pct']:.4f} | {entry['mean_latency_ms']:.4f} | {entry['median_latency_ms']:.4f} | {entry['p95_latency_ms']:.4f} | {exits} |")
     lines += ["", "The manifest records hardware, hashes, preprocessing, mode order and timing scope. Raw per-request evidence is in records.jsonl.",
-              "", "These measurements describe this Windows CPU run and current uncalibrated policy. CPU time and peak memory cover the entire process, including all resident models and recording overhead. No energy, thermal, or FLOP measurement is made."]
+              "", "These measurements describe this CPU run and the explicitly recorded policy/state. CPU time and peak memory cover the entire process, including all resident models and recording overhead. No energy, thermal, or FLOP measurement is made."]
     (output_dir / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     return summary
 
@@ -150,8 +183,17 @@ def main():
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--warmup", type=int, default=20)
     parser.add_argument("--seed", type=int, default=20261012)
+    parser.add_argument("--policy-config", type=Path)
+    parser.add_argument("--selection", type=Path)
+    parser.add_argument("--cpu-arena", type=int, choices=(0,1), default=1)
+    parser.add_argument("--memory-pattern", type=int, choices=(0,1), default=1)
+    parser.add_argument("--scenario",choices=tuple(SCENARIOS),default="normal")
+    parser.add_argument("--include-static",action="store_true")
     args = parser.parse_args()
-    result = run(args.output_dir, args.executable, args.samples, args.repeats, args.warmup, args.seed)
+    result = run(args.output_dir, args.executable, args.samples, args.repeats, args.warmup, args.seed,
+                 policy_config=args.policy_config, selection=args.selection,
+                 cpu_arena=bool(args.cpu_arena), memory_pattern=bool(args.memory_pattern),
+                 scenario=args.scenario,include_static=args.include_static)
     print(json.dumps({"report": str(args.output_dir.resolve() / "report.md"), "records": result["record_count"],
                       "modes": result["modes"]}, indent=2))
 

@@ -8,7 +8,7 @@ User-confirmed repository: https://github.com/abhishekkr10/AeroNode
 
 ## Current Scope
 
-Phases 1–5E are complete. Phase 5D implements functional sequential staged inference with explicit tensor copies and verified early-exit stage skipping. Phase 5E adds a reproducible full-validation CPU baseline comparison. See [Phase 5D validation](docs/phase5d_validation.md) and [Phase 5E measurements](docs/phase5e_validation.md) for commands, evidence, and limitations.
+The documented experimental MVP is complete through Phase 8: staged execution, measured baselines, separate threshold fitting/evaluation, controlled policy scenarios, allocator configuration experiments and local FastAPI/PostgreSQL telemetry. See the [completion record](docs/roadmap_completion.md) for evidence, commands and limits.
 
 ```text
 Phases 0-4 Complete:
@@ -27,11 +27,14 @@ Completed Phase 5:
   5D: Sequential C++ execution with early-exit skipping and parity validation
   5E: Measured CPU baseline comparison over the full validation split
 
-Remaining roadmap:
-  Threshold calibration and held-out evaluation, allocator experiments, telemetry
+Completed subsequent milestones:
+  5F: Frozen threshold configuration fitted/evaluated on disjoint subsets
+  6: Full/static/adaptive policy scenario comparisons
+  7: Supported ORT allocator configuration experiments
+  8: Local FastAPI/PostgreSQL telemetry, idempotent batched replay
 ```
 
-Phase 4 integrates the four-output ONNX model with C++17 ONNX Runtime, ZeroMQ IPC, and an exit-decision engine. Its monolithic graph evaluates every output before making a decision. Phase 5D invokes separate sessions only as needed: each completed stage evaluates that same policy, then either returns owned logits or copies the feature tensor into the next stage's vector buffer. Thresholds remain uncalibrated; Phase 5D makes no performance claim.
+Phase 4 integrates the four-output ONNX model with C++17 ONNX Runtime, ZeroMQ IPC, and an exit-decision engine. Phase 5D invokes separate sessions only as needed, with owned explicit-copy tensor boundaries. Compiled policy defaults remain unchanged; the curated calibrated Imagenette policy is opt-in through `--policy-config`. Measured results and their scope are recorded in the validation documents.
 
 ## Repository Layout
 

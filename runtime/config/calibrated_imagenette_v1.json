@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "entropy_thresholds": [
+    0.800000011920929,
+    0.800000011920929,
+    1.399999976158142,
+    2.5
+  ],
+  "calibration": {
+    "created_utc": "2026-10-12T17:39:55.276333+00:00",
+    "seed": 20261013,
+    "samples": 1959,
+    "objective": "Minimize mean fixed-exit measured-cost proxy subject to calibration accuracy constraint",
+    "max_accuracy_loss_pp": 1.0,
+    "training_checkpoint_selection_used_validation": true
+  },
+  "source_checkpoint_sha256": "32fb2975bcfe14d7311bc91db1553442391468d52c74f34a4efeb9d2aef27366",
+  "validation": {
+    "evaluation_samples": 1966,
+    "accuracy_pct": 72.68565615462869,
+    "final_exit_accuracy_pct": 72.93997965412004,
+    "scope": "Normal controlled state; held out from threshold fitting, not from checkpoint selection",
+    "record": "docs/phase5f_validation.md"
+  }
+}

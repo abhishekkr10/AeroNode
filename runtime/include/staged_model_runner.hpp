@@ -42,6 +42,8 @@ struct StagedEngineConfig {
   int intra_op_threads = 1;
   int inter_op_threads = 1;
   GraphOptimizationLevel optimization_level = GraphOptimizationLevel::ORT_ENABLE_ALL;
+  bool enable_cpu_mem_arena = true;
+  bool enable_memory_pattern = true;
 };
 
 /**
@@ -146,6 +148,7 @@ class StagedInferenceEngine {
   std::array<std::unique_ptr<Ort::Session>, 4> sessions_;
   std::array<StageMetadata, 4> metadata_;
   IntermediateFallbackBuffers fallback_buffers_;
+  std::string source_checkpoint_sha256_;
   std::mutex inference_mutex_;
   bool is_initialized_ = false;
   std::atomic<bool> is_warmed_up_{false};

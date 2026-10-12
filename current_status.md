@@ -50,9 +50,14 @@
 
 - Completed Phase 5E: Full-split native CPU baseline benchmark, deterministic paired measurement harness, raw records and source/model provenance. All 111 C++/Python cases and both existing verification scripts pass; clean Release compilation is warning-free. See `docs/phase5e_validation.md`.
 
+- Completed Phase 5F: Opt-in model-bound entropy policy fitted on 1,959 images and evaluated on 1,966 disjoint images. Observed evaluation accuracy loss is 0.2543 percentage points, within the declared normal-state target.
+- Completed Phase 6: Paired full/static/adaptive controlled-state comparisons, including actual strict-deadline misses and execution-path changes; all 12,600 records pass parity.
+- Completed Phase 7: Four supported ORT arena/memory-pattern configurations measured in separate native processes; all 14,400 records pass parity. Defaults remain unchanged.
+- Completed Phase 8: Local FastAPI/PostgreSQL schema, batched idempotent replay, validation/query endpoints and real HTTP/database integration. Full calibrated evaluation upload/replay preserves exactly 35,388 rows. Final regression: 71 C++ + 56 Python cases, plus existing verifiers; clean Release build has no compiler warnings/errors.
+
 ## In Progress
 
-- Continuing the user-authorized remaining roadmap: threshold calibration, allocator experiments, and telemetry integration.
+- None within the user-authorized experimental MVP roadmap through Phase 8.
 
 ## Blocked
 
@@ -60,7 +65,7 @@
 
 ## Next Step
 
-Phase 5E+ remains planned: hardware benchmarking, threshold calibration, baseline comparisons, allocator experiments, and telemetry. No later-phase implementation was added in Phase 5D.
+The documented MVP is complete. Independent new hardware validation, hardware sensor readings, energy studies, additional accuracy studies and authenticated public deployment are possible subsequent work; none is claimed here. See `docs/roadmap_completion.md` for the actual completion gates and boundaries.
 
 ## Known Issues
 
@@ -101,6 +106,8 @@ Phase 5E+ remains planned: hardware benchmarking, threshold calibration, baselin
 - Git: 2.53.0.windows.2; configured user identity exists; workspace initially not initialized as a repository.
 
 ## Recent Changes
+
+- 2026-10-12: Completed Phase 5F threshold fitting/evaluation, Phase 6 full/static/adaptive controlled scenarios, Phase 7 ORT allocator experiments and Phase 8 real PostgreSQL/HTTP telemetry. All 127 unit/integration cases and both existing verification scripts pass; clean Release build is warning-free. Calibrated evaluation contains 35,388 parity-verified records and telemetry persisted/replayed all of them without duplicates. See `docs/roadmap_completion.md` and phase-specific records.
 
 - 2026-10-12: Completed Phase 5E native CPU benchmark and full-validation baseline comparison: 70,650 paired requests, all 3,925 validation images, six modes and three repetitions. All outputs passed parity. Measured current-policy accuracy 72.8917% and mean latency 2.3953 ms versus monolithic 73.0955% and 3.0125 ms in this experiment. Source and scope are documented in `docs/phase5e_validation.md`. Confirmed publishing destination is https://github.com/abhishekkr10/AeroNode.
 

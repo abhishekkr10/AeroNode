@@ -23,17 +23,20 @@
 #include "runtime_state.hpp"
 #include "state_receiver.hpp"
 #include "staged_model_runner.hpp"
+#include "policy_config.hpp"
 
 namespace {
 
 struct Options {
   std::string model_path;
   std::string staged_dir;
+  std::string policy_path;
   std::string input_bin_path;
   std::string ipc_endpoint;
   int iterations = 100;
   int batch_size = 1;
   bool iterations_supplied = false;
+  bool thresholds_supplied = false;
 
   // Manual override options (used if no live IPC endpoint is specified)
   bool has_manual_overrides = false;
@@ -67,6 +70,8 @@ Options ParseOptions(int argc, char* argv[]) {
       options.model_path = argv[++index];
     } else if (argument == "--staged-dir" && index + 1 < argc) {
       options.staged_dir = argv[++index];
+    } else if (argument == "--policy-config" && index + 1 < argc) {
+      options.policy_path = argv[++index];
     } else if (argument == "--iterations" && index + 1 < argc) {
       options.iterations = std::stoi(argv[++index]);
       options.iterations_supplied = true;
@@ -90,11 +95,12 @@ Options ParseOptions(int argc, char* argv[]) {
       options.has_manual_overrides = true;
     } else if (argument == "--entropy-thresholds" && index + 1 < argc) {
       options.entropy_thresholds = ParseThresholds(argv[++index]);
+      options.thresholds_supplied = true;
     } else {
       throw std::invalid_argument(
           "Usage: aeronode_runtime (--model <path> | --staged-dir <path>) [--iterations N] [--batch-size N] "
           "[--input-bin <path>] [--ipc-endpoint <ep>] [--cpu-load N] [--temperature N] "
-          "[--latency-budget N] [--resource-pressure N] [--entropy-thresholds t1,t2,t3,t4]");
+          "[--latency-budget N] [--resource-pressure N] [--entropy-thresholds t1,t2,t3,t4] [--policy-config path]");
     }
   }
   if (options.model_path.empty() == options.staged_dir.empty() || options.iterations <= 0 || options.batch_size <= 0) {
@@ -103,6 +109,9 @@ Options ParseOptions(int argc, char* argv[]) {
   }
   if (!options.staged_dir.empty() && options.iterations_supplied && options.iterations != 1) {
     throw std::invalid_argument("Phase 5D staged mode executes one request; --iterations must be 1");
+  }
+  if (!options.policy_path.empty() && options.thresholds_supplied) {
+    throw std::invalid_argument("Use either --policy-config or --entropy-thresholds, not both");
   }
   return options;
 }
@@ -191,8 +200,9 @@ int main(int argc, char* argv[]) {
       }
       const auto input = LoadBinaryFloats(options.input_bin_path, count);
       const auto state = GetStateSnapshot(options, state_receiver.get());
-      aeronode::ExitPolicyConfig policy_config;
-      policy_config.entropy_thresholds = options.entropy_thresholds;
+      auto policy_config = options.policy_path.empty() ? aeronode::ExitPolicyConfig{} :
+          aeronode::LoadExitPolicy(options.policy_path);
+      if (options.policy_path.empty()) policy_config.entropy_thresholds = options.entropy_thresholds;
       const auto result = engine.Infer(input, {options.batch_size, 3, 128, 128}, state,
                                         aeronode::ExitDecisionEngine(policy_config));
       nlohmann::json report = {{"mode", "staged"}, {"selected_exit", result.selected_exit},
@@ -371,8 +381,16 @@ int main(int argc, char* argv[]) {
     const double p95_ms = Percentile95(latency_ms);
 
     // Build policy engine
-    aeronode::ExitPolicyConfig policy_config;
-    policy_config.entropy_thresholds = options.entropy_thresholds;
+    auto policy_config = options.policy_path.empty() ? aeronode::ExitPolicyConfig{} :
+        aeronode::LoadExitPolicy(options.policy_path);
+    if (options.policy_path.empty()) policy_config.entropy_thresholds = options.entropy_thresholds;
+    if (!policy_config.source_checkpoint_sha256.empty()) {
+      const auto model_metadata = session.GetModelMetadata();
+      const auto checkpoint = model_metadata.LookupCustomMetadataMapAllocated("source_checkpoint_sha256", allocator);
+      if (!checkpoint || std::string(checkpoint.get()) != policy_config.source_checkpoint_sha256) {
+        throw std::invalid_argument("Calibrated policy checkpoint does not match monolithic model");
+      }
+    }
     aeronode::ExitDecisionEngine decision_engine(policy_config);
 
     // Compute metrics for sample 0 across all 4 exits for early-exit decision evaluation

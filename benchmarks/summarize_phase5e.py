@@ -11,17 +11,19 @@ REASONS = {"FULL_DEPTH_BASELINE", "CONFIDENCE_MET", "LATENCY_BUDGET_EXHAUSTED",
            "RESOURCE_PRESSURE_FORCED_EXIT", "FINAL_EXIT_REACHED"}
 
 
-def summarize(path: Path, samples: int, repeats: int) -> dict:
+def summarize(path: Path, samples: int, repeats: int, calibrated: bool = False, include_static: bool = False) -> dict:
     if samples <= 0 or repeats <= 0:
         raise ValueError("Samples and repeats must be positive")
     groups = defaultdict(list)
+    modes = (*MODES[:5], "adaptive_calibrated") if calibrated else MODES
+    if include_static: modes = (*modes,"static_calibrated" if calibrated else "static_current")
     seen = set()
     labels = {}
     with path.open(encoding="utf-8") as records:
         for line in records:
             row = json.loads(line)
             mode, sample, repetition = row["mode"], row["sample_index"], row["repetition"]
-            if mode not in MODES or not 0 <= sample < samples or not 0 <= repetition < repeats:
+            if mode not in modes or not 0 <= sample < samples or not 0 <= repetition < repeats:
                 raise ValueError("Unknown mode or out-of-range sample/repetition")
             key = (mode, sample, repetition)
             if key in seen:
@@ -50,10 +52,10 @@ def summarize(path: Path, samples: int, repeats: int) -> dict:
             if row["deadline_missed"] != (latency > row["latency_budget_ms"]):
                 raise ValueError("Deadline outcome mismatch")
             groups[mode].append(row)
-    if len(seen) != len(MODES) * samples * repeats:
+    if len(seen) != len(modes) * samples * repeats:
         raise ValueError("Incomplete benchmark record matrix")
     result = {}
-    for mode in MODES:
+    for mode in modes:
         rows = groups[mode]
         times = np.array([row["latency_ms"] for row in rows], dtype=np.float64)
         accuracy = lambda selected: 100.0 * sum(row["label"] == row["predicted_class"] for row in selected) / len(selected)
@@ -72,7 +74,7 @@ def summarize(path: Path, samples: int, repeats: int) -> dict:
             "reference_max_abs_error": max(row["reference_max_abs_error"] for row in rows),
         }
     baseline = result["monolithic_full"]["mean_latency_ms"]
-    for mode in MODES:
+    for mode in modes:
         result[mode]["mean_latency_ratio_to_monolithic"] = result[mode]["mean_latency_ms"] / baseline
     return {"schema_version": 1, "measurement_type": "measured CPU benchmark", "batch_size": 1,
             "samples": samples, "repeats": repeats, "record_count": len(seen),

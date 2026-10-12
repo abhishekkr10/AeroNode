@@ -126,6 +126,8 @@ StagedInferenceEngine::StagedInferenceEngine(const StagedEngineConfig& config)
   session_options_.SetGraphOptimizationLevel(config_.optimization_level);
   session_options_.SetIntraOpNumThreads(config_.intra_op_threads);
   session_options_.SetInterOpNumThreads(config_.inter_op_threads);
+  if (!config_.enable_cpu_mem_arena) session_options_.DisableCpuMemArena();
+  if (!config_.enable_memory_pattern) session_options_.DisableMemPattern();
 
   InitializeSessions();
   InspectAndValidateContracts();
@@ -308,7 +310,10 @@ void StagedInferenceEngine::InspectAndValidateContracts() {
     if (hash.size() != 64 || hash.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos) {
       throw std::runtime_error(meta.stage_name + ": malformed source_checkpoint_sha256");
     }
-    if (stage_idx == 0) checkpoint_hash = hash;
+    if (stage_idx == 0) {
+      checkpoint_hash = hash;
+      source_checkpoint_sha256_ = hash;
+    }
     if (hash != checkpoint_hash) {
       throw std::runtime_error(meta.stage_name + ": source checkpoint hash mismatch across stages");
     }
@@ -377,6 +382,9 @@ StagedInferenceResult StagedInferenceEngine::Infer(
   const std::lock_guard<std::mutex> lock(inference_mutex_);
   if (shape.size() != 4 || shape[0] <= 0 || shape[1] != 3 || shape[2] != 128 || shape[3] != 128) {
     throw std::invalid_argument("stage_1 input: expected [batch>0,3,128,128], got " + ShapeString(shape));
+  }
+  if (!policy.SourceCheckpointSha256().empty() && policy.SourceCheckpointSha256() != source_checkpoint_sha256_) {
+    throw std::invalid_argument("Calibrated policy checkpoint does not match staged models");
   }
   const auto expected_count = CheckedElementCount(shape);
   if (input.empty() || input.size() != expected_count) {

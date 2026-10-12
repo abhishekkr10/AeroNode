@@ -1,5 +1,6 @@
 // Phase 5E: persistent native execution with paired, untimed input/output I/O.
 #include "staged_model_runner.hpp"
+#include "policy_config.hpp"
 
 #include <algorithm>
 #include <array>
@@ -26,11 +27,15 @@
 namespace {
 using Clock = std::chrono::steady_clock;
 constexpr std::size_t input_elements = 3 * 128 * 128;
-const std::array<std::string, 6> modes = {
+std::vector<std::string> modes = {
     "monolithic_full", "staged_exit_1", "staged_exit_2", "staged_exit_3", "staged_exit_4", "adaptive_current"};
 
 struct Options {
   std::string input, labels, stage_dir, model, records;
+  std::string policy_path;
+  bool cpu_arena = true, memory_pattern = true;
+  bool include_static = false;
+  aeronode::RuntimeState adaptive_state;
   int samples = 0, repeats = 3, warmup = 20, seed = 20261012;
 };
 
@@ -54,6 +59,25 @@ Options Parse(int argc, char** argv) {
     else if (key == "--stage-dir") options.stage_dir = value;
     else if (key == "--monolithic-model") options.model = value;
     else if (key == "--records") options.records = value;
+    else if (key == "--policy-config") options.policy_path = value;
+    else if (key == "--include-static") {
+      if (value != "0" && value != "1") throw std::invalid_argument("Static switch requires 0 or 1");
+      options.include_static = value == "1";
+    }
+    else if (key == "--latency-budget" || key == "--resource-pressure" || key == "--cpu-load" || key == "--temperature") {
+      std::size_t end = 0;
+      const float number = std::stof(value,&end);
+      if (end != value.size() || !std::isfinite(number)) throw std::invalid_argument("RuntimeState value must be finite numeric");
+      if (key == "--latency-budget") options.adaptive_state.latency_budget_ms = number;
+      if (key == "--resource-pressure") options.adaptive_state.resource_pressure = number;
+      if (key == "--cpu-load") options.adaptive_state.cpu_load = number;
+      if (key == "--temperature") options.adaptive_state.temperature_c = number;
+    }
+    else if (key == "--cpu-arena" || key == "--memory-pattern") {
+      if (value != "0" && value != "1") throw std::invalid_argument("Allocator switches require 0 or 1");
+      if (key == "--cpu-arena") options.cpu_arena = value == "1";
+      else options.memory_pattern = value == "1";
+    }
     else if (key == "--samples") options.samples = PositiveInt(value);
     else if (key == "--repeats") options.repeats = PositiveInt(value);
     else if (key == "--warmup") options.warmup = PositiveInt(value);
@@ -64,6 +88,7 @@ Options Parse(int argc, char** argv) {
       options.stage_dir.empty() || options.model.empty() || options.records.empty()) {
     throw std::invalid_argument("Required: --input-bin --labels-bin --stage-dir --monolithic-model --records --samples");
   }
+  if (!options.adaptive_state.IsValid()) throw std::invalid_argument("Invalid controlled RuntimeState");
   return options;
 }
 
@@ -112,11 +137,13 @@ void ValidateFile(const std::string& path, std::uintmax_t bytes) {
 
 class Reference {
  public:
-  explicit Reference(const std::string& path)
+  explicit Reference(const std::string& path, bool cpu_arena, bool memory_pattern)
       : environment_(ORT_LOGGING_LEVEL_WARNING, "phase5e_reference"), session_(nullptr),
         memory_(Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)) {
     options_.SetIntraOpNumThreads(1);
     options_.SetInterOpNumThreads(1);
+    if (!cpu_arena) options_.DisableCpuMemArena();
+    if (!memory_pattern) options_.DisableMemPattern();
     const auto native = std::filesystem::u8path(path);
     session_ = Ort::Session(environment_, native.c_str(), options_);
     Ort::AllocatorWithDefaultOptions allocator;
@@ -194,12 +221,14 @@ int main(int argc, char** argv) {
     for (const auto label : labels) if (label < 0 || label >= 10) throw std::invalid_argument("Label outside [0,9]");
 
     aeronode::StagedEngineConfig config;
+    config.enable_cpu_mem_arena = options.cpu_arena;
+    config.enable_memory_pattern = options.memory_pattern;
     for (std::size_t i = 0; i < 4; ++i) {
       config.stage_model_paths[i] = (std::filesystem::u8path(options.stage_dir) /
           ("stage_" + std::to_string(i + 1) + ".onnx")).u8string();
     }
     aeronode::StagedInferenceEngine engine(config);
-    Reference reference(options.model);
+    Reference reference(options.model, options.cpu_arena, options.memory_pattern);
     std::vector<aeronode::ExitDecisionEngine> policies;
     for (int exit = 1; exit <= 4; ++exit) {
       aeronode::ExitPolicyConfig policy;
@@ -207,11 +236,15 @@ int main(int argc, char** argv) {
       if (exit < 4) policy.entropy_thresholds[static_cast<std::size_t>(exit - 1)] = 3.0F;
       policies.emplace_back(policy);
     }
-    policies.emplace_back();  // Current, uncalibrated Phase-4 policy.
+    const auto adaptive_config = options.policy_path.empty() ? aeronode::ExitPolicyConfig{} :
+        aeronode::LoadExitPolicy(options.policy_path);
+    policies.emplace_back(adaptive_config);
+    if (!options.policy_path.empty()) modes[5] = "adaptive_calibrated";
+    if (options.include_static) modes.push_back(options.policy_path.empty() ? "static_current" : "static_calibrated");
     aeronode::RuntimeState baseline_state;
     baseline_state.latency_budget_ms = 1000000.0F;
     baseline_state.resource_pressure = 0.0F;
-    const aeronode::RuntimeState adaptive_state;  // Controlled normal-state snapshot.
+    const auto adaptive_state = options.adaptive_state;  // Controlled experimental snapshot.
     std::vector<float> input(input_elements);
     const auto load = [&](int sample) {
       images.seekg(static_cast<std::streamoff>(sample) * static_cast<std::streamoff>(input_elements * sizeof(float)));
@@ -226,7 +259,7 @@ int main(int argc, char** argv) {
         measurement.logits = measurement.reference[3];
       } else {
         const auto result = engine.Infer(input, {1, 3, 128, 128},
-            mode == 5 ? adaptive_state : baseline_state, policies[mode - 1]);
+            mode == 5 ? adaptive_state : baseline_state, policies[mode == 6 ? 4 : mode - 1]);
         measurement.logits = result.logits;
         measurement.stage_runs = result.stage_run_counts;
         measurement.exit = result.selected_exit;
@@ -252,7 +285,7 @@ int main(int argc, char** argv) {
       for (std::size_t position = 0; position < order.size(); ++position) {
         const int sample = order[position];
         load(sample);  // Disk I/O is outside every request timer.
-        std::array<Measurement, 6> results;
+        std::vector<Measurement> results(modes.size());
         for (std::size_t slot = 0; slot < modes.size(); ++slot) {
           const auto mode = (slot + position + static_cast<std::size_t>(repetition)) % modes.size();
           results[mode] = run(mode);
@@ -270,13 +303,15 @@ int main(int argc, char** argv) {
           if (max_error > 1e-5 || metrics.predicted_class != expected_metrics.predicted_class) {
             throw std::runtime_error("Parity failed during benchmark at sample " + std::to_string(sample));
           }
-          const double budget = mode == 5 ? adaptive_state.latency_budget_ms : baseline_state.latency_budget_ms;
+          const double policy_budget = mode == 5 ? adaptive_state.latency_budget_ms : baseline_state.latency_budget_ms;
+          const double budget = options.include_static ? adaptive_state.latency_budget_ms : policy_budget;
           records << nlohmann::json{{"mode", modes[mode]}, {"repetition", repetition}, {"sample_index", sample},
               {"label", labels[static_cast<std::size_t>(sample)]}, {"predicted_class", metrics.predicted_class},
               {"selected_exit", result.exit}, {"stage_run_counts", result.stage_runs},
               {"monolithic_session_runs", mode == 0 ? 1 : 0}, {"latency_ms", result.latency_ms},
               {"confidence", metrics.confidence}, {"entropy", metrics.entropy}, {"reason", result.reason},
               {"latency_budget_ms", budget}, {"deadline_missed", result.latency_ms > budget},
+              {"policy_latency_budget_ms", policy_budget},
               {"reference_max_abs_error", max_error}}.dump() << '\n';
         }
       }
@@ -294,7 +329,8 @@ int main(int argc, char** argv) {
         {"process_peak_working_set_bytes", PeakWorkingSet()},
         {"adaptive_state", {{"cpu_load", adaptive_state.cpu_load}, {"temperature_c", adaptive_state.temperature_c},
           {"resource_pressure", adaptive_state.resource_pressure}, {"latency_budget_ms", adaptive_state.latency_budget_ms}}},
-        {"adaptive_thresholds", aeronode::ExitPolicyConfig{}.entropy_thresholds}}.dump(2) << '\n';
+        {"adaptive_thresholds", adaptive_config.entropy_thresholds},
+        {"cpu_mem_arena_enabled", options.cpu_arena}, {"memory_pattern_enabled", options.memory_pattern}}.dump(2) << '\n';
     return 0;
   } catch (const std::exception& error) {
     std::cerr << "aeronode_benchmark: " << error.what() << '\n';
