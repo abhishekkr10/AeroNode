@@ -1,5 +1,9 @@
 # Current Status
 
+## Latest extension — 2026-10-20
+
+Phase 9 adds a normal-photo inference workflow with native adaptive/full-depth comparison, independent output parity, stage execution evidence and offline reports. Verified model transfer, a checked Windows setup helper and an actual host CPU/memory publisher reduce reproduction friction. Temperature remains an explicitly configured fallback and pressure is a documented proxy. See [validation](docs/phase9_validation.md), [quick start](docs/quickstart.md) and [interview walkthrough](docs/interview_walkthrough.md). Current exercised total: 145 distinct C++/Python cases; 6/6 CTest entries; clean Release build with zero compiler warnings/errors. Native portability beyond Windows remains outstanding.
+
 ## Completed
 
 - Read and visually inspected all 8 pages of `AeroNode_Project_Brief (1).pdf`.

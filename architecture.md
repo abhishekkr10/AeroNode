@@ -10,6 +10,8 @@ Fixed-depth inference ignores changes in CPU load, thermal pressure, and latency
 
 ## Implementation State
 
+The Phase-9 extension wraps the native executable with an image/evidence workflow, independently checks both adaptive and full-depth outputs, and records model/input hashes plus native execution traces in JSON/offline HTML. `control_plane/device.py` publishes real host CPU/memory-derived state over the existing wire contract, with a separate provenance audit. Pressure is a proxy and temperature remains a configured fallback. See `docs/phase9_validation.md`; the existing core execution/policy architecture is preserved.
+
 The experimental MVP is implemented and verified through Phase 8. Phases 1–4 established training, the reference graph/runtime, entropy, policy and ZeroMQ snapshots. Phases 5A–5D implement verified staged execution; 5E measures CPU baselines; 5F fits and separately evaluates an opt-in model-bound threshold configuration. Phase 6 compares full/static/adaptive controlled scenarios; Phase 7 measures supported ORT allocator options; Phase 8 stores/replays telemetry through local FastAPI/PostgreSQL. `docs/roadmap_completion.md` links the evidence and explicit limits. `current_status.md` records the current state.
 
 ## High-Level Architecture

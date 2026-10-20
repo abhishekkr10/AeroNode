@@ -1,5 +1,7 @@
 # AeroNode MVP roadmap completion
 
+The original MVP remains complete through Phase 8. A subsequent Phase-9 usability/host-sensing extension is recorded in [Phase 9 validation](phase9_validation.md). It adds photo-based native evidence, verified artifact transfer and host CPU/memory publication without changing the original policy or claiming new benchmark gains.
+
 Publishing destination: **https://github.com/abhishekkr10/AeroNode**.
 
 The user-authorized documented MVP roadmap is implemented and validated through Phase 8. This records completed engineering work and its actual limits; it does not claim every possible research extension is complete.

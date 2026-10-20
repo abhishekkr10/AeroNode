@@ -6,6 +6,18 @@ The authoritative project brief is `AeroNode_Project_Brief (1).pdf`. See `archit
 
 User-confirmed repository: https://github.com/abhishekkr10/AeroNode
 
+## Try it: Inference Evidence
+
+Run a normal photo through the **native C++ adaptive engine**, compare its answer with full-depth execution and open a self-contained report showing exactly which stages ran and why. Both predictions are independently checked against ONNX Runtime reference execution. Reports retain model/input fingerprints and distinguish process startup time from inference benchmarks.
+
+```powershell
+./.venv/Scripts/python.exe -m tools.evidence doctor
+./.venv/Scripts/python.exe -m tools.evidence image --image C:/photos/example.jpg `
+  --policy-config runtime/config/calibrated_imagenette_v1.json --output tmp/my-demo
+```
+
+Start with the [setup and photo quick start](docs/quickstart.md), including model transfer, actual host CPU/memory publishing and troubleshooting. For a technical presentation, use the [interview walkthrough](docs/interview_walkthrough.md). Model binaries are intentionally not included in Git; the image demo needs the four stage exports but no training dataset. Windows x64 is the verified native platform.
+
 ## Current Scope
 
 The documented experimental MVP is complete through Phase 8: staged execution, measured baselines, separate threshold fitting/evaluation, controlled policy scenarios, allocator configuration experiments and local FastAPI/PostgreSQL telemetry. See the [completion record](docs/roadmap_completion.md) for evidence, commands and limits.
