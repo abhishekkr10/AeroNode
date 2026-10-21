@@ -17,4 +17,4 @@ jobs:
           python-version: '3.13'
       - run: python -m pip install numpy==2.5.3 -r requirements-phase4.txt
       - name: Verify integrity, failure handling and host-counter contracts
-        run: python -m unittest tests.test_evidence.EvidenceContractTests tests.test_device.DeviceStateTests -v
+        run: python -m unittest tests.test_evidence.EvidenceContractTests tests.test_device.DeviceStateTests tests.test_device_study.StudyContractTests -v

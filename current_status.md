@@ -1,5 +1,11 @@
 # Current Status
 
+## Device-study extension — 2026-10-21
+
+Phase-10 tooling adds live-snapshot persistent benchmarks, bounded CPU-contention workers, alternating idle/contention rounds, publisher-audit matching and portable comparison with protocol/model/data compatibility checks. The native inference policy is unchanged. See [device-study instructions](docs/device_study.md). Actual second-device validation remains pending access to that hardware; local measurements must not be presented as a two-device experiment.
+
+Local validation completed 16,800 requests with numerical parity, 156 distinct C++/Python cases, 6/6 CTest entries and a warning-free clean Release build. At the selected 3-ms target, adaptive accuracy was 59% versus full-depth 70%, despite lower P95/fewer misses. See [Phase-10 evidence and limits](docs/phase10_validation.md); this is a recorded trade-off, not an acceptable-accuracy deployment claim.
+
 ## Latest extension — 2026-10-20
 
 Phase 9 adds a normal-photo inference workflow with native adaptive/full-depth comparison, independent output parity, stage execution evidence and offline reports. Verified model transfer, a checked Windows setup helper and an actual host CPU/memory publisher reduce reproduction friction. Temperature remains an explicitly configured fallback and pressure is a documented proxy. See [validation](docs/phase9_validation.md), [quick start](docs/quickstart.md) and [interview walkthrough](docs/interview_walkthrough.md). Current exercised total: 145 distinct C++/Python cases; 6/6 CTest entries; clean Release build with zero compiler warnings/errors. Native portability beyond Windows remains outstanding.

@@ -2,6 +2,8 @@
 
 The original MVP remains complete through Phase 8. A subsequent Phase-9 usability/host-sensing extension is recorded in [Phase 9 validation](phase9_validation.md). It adds photo-based native evidence, verified artifact transfer and host CPU/memory publication without changing the original policy or claiming new benchmark gains.
 
+The [Phase-10 device-study extension](phase10_validation.md) implements and locally validates live-state persistent benchmarks and bounded contention experiments. A real second-device comparison remains pending; the original exit policy is preserved.
+
 Publishing destination: **https://github.com/abhishekkr10/AeroNode**.
 
 The user-authorized documented MVP roadmap is implemented and validated through Phase 8. This records completed engineering work and its actual limits; it does not claim every possible research extension is complete.

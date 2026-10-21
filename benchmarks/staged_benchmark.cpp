@@ -1,6 +1,9 @@
 // Phase 5E: persistent native execution with paired, untimed input/output I/O.
 #include "staged_model_runner.hpp"
 #include "policy_config.hpp"
+#include "state_receiver.hpp"
+#include <memory>
+#include <thread>
 
 #include <algorithm>
 #include <array>
@@ -32,7 +35,7 @@ std::vector<std::string> modes = {
 
 struct Options {
   std::string input, labels, stage_dir, model, records;
-  std::string policy_path;
+  std::string policy_path, ipc_endpoint;
   bool cpu_arena = true, memory_pattern = true;
   bool include_static = false;
   aeronode::RuntimeState adaptive_state;
@@ -60,6 +63,7 @@ Options Parse(int argc, char** argv) {
     else if (key == "--monolithic-model") options.model = value;
     else if (key == "--records") options.records = value;
     else if (key == "--policy-config") options.policy_path = value;
+    else if (key == "--ipc-endpoint") options.ipc_endpoint = value;
     else if (key == "--include-static") {
       if (value != "0" && value != "1") throw std::invalid_argument("Static switch requires 0 or 1");
       options.include_static = value == "1";
@@ -208,6 +212,21 @@ struct Measurement {
 int main(int argc, char** argv) {
   try {
     const auto options = Parse(argc, argv);
+    std::unique_ptr<aeronode::StateReceiver> receiver;
+    if (!options.ipc_endpoint.empty()) {
+      receiver = std::make_unique<aeronode::StateReceiver>(options.ipc_endpoint);
+      receiver->Start();
+      const auto limit = Clock::now() + std::chrono::seconds(3);
+      while (receiver->GetLatestSnapshot().is_stale && Clock::now() < limit) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+      }
+      if (receiver->GetLatestSnapshot().is_stale) throw std::runtime_error("No fresh benchmark IPC state");
+    }
+    const auto snapshot = [&]() {
+      const auto state = receiver ? receiver->GetLatestSnapshot() : options.adaptive_state;
+      if (receiver && state.is_stale) throw std::runtime_error("Benchmark IPC state became stale");
+      return state;
+    };
     ValidateFile(options.input, static_cast<std::uintmax_t>(options.samples) * input_elements * sizeof(float));
     ValidateFile(options.labels, static_cast<std::uintmax_t>(options.samples) * sizeof(std::int32_t));
     if (std::filesystem::exists(std::filesystem::u8path(options.records))) {
@@ -244,14 +263,14 @@ int main(int argc, char** argv) {
     aeronode::RuntimeState baseline_state;
     baseline_state.latency_budget_ms = 1000000.0F;
     baseline_state.resource_pressure = 0.0F;
-    const auto adaptive_state = options.adaptive_state;  // Controlled experimental snapshot.
+    auto adaptive_state = snapshot();
     std::vector<float> input(input_elements);
     const auto load = [&](int sample) {
       images.seekg(static_cast<std::streamoff>(sample) * static_cast<std::streamoff>(input_elements * sizeof(float)));
       images.read(reinterpret_cast<char*>(input.data()), static_cast<std::streamsize>(input_elements * sizeof(float)));
       if (!images) throw std::runtime_error("Failed to read image sample " + std::to_string(sample));
     };
-    const auto run = [&](std::size_t mode) {
+    const auto run = [&](std::size_t mode, const aeronode::RuntimeState& request_state) {
       Measurement measurement;
       const auto start = Clock::now();
       if (mode == 0) {
@@ -259,7 +278,7 @@ int main(int argc, char** argv) {
         measurement.logits = measurement.reference[3];
       } else {
         const auto result = engine.Infer(input, {1, 3, 128, 128},
-            mode == 5 ? adaptive_state : baseline_state, policies[mode == 6 ? 4 : mode - 1]);
+            mode == 5 ? request_state : baseline_state, policies[mode == 6 ? 4 : mode - 1]);
         measurement.logits = result.logits;
         measurement.stage_runs = result.stage_run_counts;
         measurement.exit = result.selected_exit;
@@ -271,7 +290,8 @@ int main(int argc, char** argv) {
     engine.WarmUp();
     for (int i = 0; i < options.warmup; ++i) {
       load(i % options.samples);
-      for (std::size_t mode = 0; mode < modes.size(); ++mode) run(mode);
+      const auto warmup_state = snapshot();
+      for (std::size_t mode = 0; mode < modes.size(); ++mode) run(mode, warmup_state);
     }
     std::ofstream records(std::filesystem::u8path(options.records));
     if (!records) throw std::runtime_error("Cannot create benchmark records");
@@ -285,10 +305,13 @@ int main(int argc, char** argv) {
       for (std::size_t position = 0; position < order.size(); ++position) {
         const int sample = order[position];
         load(sample);  // Disk I/O is outside every request timer.
+        // One shared resource observation per paired sample; snapshot acquisition
+        // is outside request timers, with no per-layer IPC or sensor reads.
+        adaptive_state = snapshot();
         std::vector<Measurement> results(modes.size());
         for (std::size_t slot = 0; slot < modes.size(); ++slot) {
           const auto mode = (slot + position + static_cast<std::size_t>(repetition)) % modes.size();
-          results[mode] = run(mode);
+          results[mode] = run(mode, adaptive_state);
         }
         for (std::size_t mode = 0; mode < modes.size(); ++mode) {
           const auto& result = results[mode];
@@ -312,6 +335,11 @@ int main(int argc, char** argv) {
               {"confidence", metrics.confidence}, {"entropy", metrics.entropy}, {"reason", result.reason},
               {"latency_budget_ms", budget}, {"deadline_missed", result.latency_ms > budget},
               {"policy_latency_budget_ms", policy_budget},
+              {"state_source", receiver ? "external_ipc" : "controlled"},
+              {"runtime_state", {{"sequence", adaptive_state.sequence},
+                {"timestamp_unix_ms", adaptive_state.timestamp_unix_ms},
+                {"cpu_load", adaptive_state.cpu_load}, {"temperature_c", adaptive_state.temperature_c},
+                {"resource_pressure", adaptive_state.resource_pressure}, {"is_stale", adaptive_state.is_stale}}},
               {"reference_max_abs_error", max_error}}.dump() << '\n';
         }
       }

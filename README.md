@@ -20,6 +20,8 @@ Start with the [setup and photo quick start](docs/quickstart.md), including mode
 
 ## Current Scope
 
+The [device-study runner](docs/device_study.md) adds counterbalanced idle/contention experiments with actual host CPU/memory snapshots, per-pair evidence and guarded portable comparison. Run the same protocol on two devices to evaluate portability; local execution alone does not establish a second-device result.
+
 The documented experimental MVP is complete through Phase 8: staged execution, measured baselines, separate threshold fitting/evaluation, controlled policy scenarios, allocator configuration experiments and local FastAPI/PostgreSQL telemetry. See the [completion record](docs/roadmap_completion.md) for evidence, commands and limits.
 
 ```text

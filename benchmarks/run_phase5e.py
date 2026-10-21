@@ -72,7 +72,7 @@ def hardware_metadata():
 
 def run(output_dir, executable, samples=0, repeats=3, warmup=20, seed=20261012, data_root=None,
         policy_config=None, selection=None, cpu_arena=True, memory_pattern=True,
-        scenario="normal", include_static=False):
+        scenario="normal", include_static=False, ipc_endpoint=None, timeout_seconds=None):
     if repeats <= 0 or warmup <= 0 or seed <= 0:
         raise ValueError("Repeats, warmup, and seed must be positive")
     if sys.byteorder != "little":
@@ -136,6 +136,9 @@ def run(output_dir, executable, samples=0, repeats=3, warmup=20, seed=20261012, 
         provenance["policy_file_sha256"] = sha256(policy_config)
     provenance["allocator_options"] = {"cpu_mem_arena": cpu_arena, "memory_pattern": memory_pattern}
     provenance["scenario"] = {"name":scenario,"controlled_state":SCENARIOS[scenario]}
+    if ipc_endpoint:
+        provenance["state_scope"] = "External ZeroMQ snapshot per paired sample; inspect publisher audit for provenance"
+        provenance["scenario"] = {"name": "external_ipc", "endpoint": ipc_endpoint}
     (output_dir / "manifest.json").write_text(json.dumps(provenance, indent=2), encoding="utf-8")
     command = [str(executable), "--input-bin", str(input_path), "--labels-bin", str(labels_path),
                "--stage-dir", str(stage_dir), "--monolithic-model", str(model),
@@ -149,11 +152,13 @@ def run(output_dir, executable, samples=0, repeats=3, warmup=20, seed=20261012, 
         command += [key,str(state[field])]
     if policy_config is not None:
         command += ["--policy-config", str(Path(policy_config).resolve())]
+    if ipc_endpoint:
+        command += ["--ipc-endpoint", ipc_endpoint]
     environment = os.environ.copy()
     if os.name == "nt":
         environment["PATH"] = "C:\\msys64\\ucrt64\\bin;" + environment.get("PATH", "")
     completed = subprocess.run(command, cwd=ROOT, env=environment, stdout=subprocess.PIPE,
-                               text=True)  # C++ progress is visible on stderr while it runs.
+                               text=True, timeout=timeout_seconds)  # Progress is visible on stderr.
     if completed.returncode != 0:
         raise RuntimeError(f"Native benchmark failed with exit {completed.returncode}; partial evidence retained in {output_dir}")
     execution = json.loads(completed.stdout)

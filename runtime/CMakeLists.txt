@@ -162,7 +162,10 @@ endif()
 
 # Existing suites use assert: keep assertions active even in Release builds.
 add_executable(aeronode_benchmark "${PROJECT_SOURCE_DIR}/benchmarks/staged_benchmark.cpp")
-target_link_libraries(aeronode_benchmark PRIVATE aeronode_lib)
+target_link_libraries(aeronode_benchmark PRIVATE aeronode_lib "${ZEROMQ_LIBRARY}")
+if(WIN32)
+  target_link_libraries(aeronode_benchmark PRIVATE ws2_32 iphlpapi)
+endif()
 if(MSVC)
   target_compile_options(aeronode_benchmark PRIVATE /W4 /permissive-)
 else()

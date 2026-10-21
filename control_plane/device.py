@@ -12,6 +12,7 @@ import json
 import math
 from pathlib import Path
 import platform
+import sys
 import time
 
 from control_plane.simulator import RuntimeState, ZeroMQStatePublisher
@@ -107,9 +108,24 @@ def publish(endpoint: str, frequency: float, count: int, deadline: float,
     audit.parent.mkdir(parents=True, exist_ok=True)
     # Exclusive create preserves provenance of previous runs.
     with audit.open("x", encoding="utf-8") as output, ZeroMQStatePublisher(endpoint) as publisher:
+        consecutive_rejections = 0
         for sequence in range(count):
             time.sleep(1 / frequency)
-            reading = sampler.sample(sequence, deadline, temperature)
+            try:
+                reading = sampler.sample(sequence, deadline, temperature)
+            except ValueError as error:
+                # Short-window host counter anomalies must not refresh a native
+                # snapshot with invented values. Keep the last valid baseline,
+                # allow the next longer counter interval to recover, and bound
+                # recovery attempts so persistent failures stop the publisher.
+                consecutive_rejections += 1
+                print(json.dumps({"event": "sample_rejected", "sequence": sequence,
+                    "consecutive_rejections": consecutive_rejections, "reason": str(error)}),
+                    file=sys.stderr, flush=True)
+                if consecutive_rejections >= 5:
+                    raise RuntimeError("Five consecutive invalid host samples; publisher stopped") from error
+                continue
+            consecutive_rejections = 0
             publisher.publish(RuntimeState(**reading["state"]))
             output.write(json.dumps(reading, allow_nan=False) + "\n")
             output.flush()

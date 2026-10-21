@@ -8,6 +8,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import Mock, patch
 
 from control_plane.device import DeviceSampler, linux_counters, publish
 from tools.evidence import ROOT, image_evidence
@@ -42,6 +43,30 @@ class DeviceStateTests(unittest.TestCase):
                 (5, 0, 30, 60), (5, 1, -1, 60), (5, 1, 30, float("inf"))):
             with self.subTest(frequency=frequency, count=count), self.assertRaises(ValueError):
                 publish("tcp://127.0.0.1:5555", frequency, count, deadline, temperature, Path("unused"))
+
+    def test_publisher_skips_transient_invalid_sample(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            sampler = Mock()
+            state = {"schema_version": 1, "sequence": 1, "timestamp_unix_ms": 1000,
+                "cpu_load": 25, "temperature_c": 60, "latency_budget_ms": 30, "resource_pressure": 0.5}
+            sampler.sample.side_effect = [ValueError("invalid counters"), {"state": state},
+                                          {"state": dict(state, sequence=2)}]
+            with patch("control_plane.device.DeviceSampler", return_value=sampler), patch("control_plane.device.ZeroMQStatePublisher") as publisher, patch("control_plane.device.time.sleep"):
+                audit = Path(temporary) / "audit.jsonl"
+                publish("unused", 20, 3, 30, 60, audit)
+                self.assertEqual(len(audit.read_text().splitlines()), 2)
+                self.assertEqual(publisher.return_value.__enter__.return_value.publish.call_count, 2)
+
+    def test_publisher_stops_after_repeated_invalid_samples(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            sampler = Mock()
+            sampler.sample.side_effect = ValueError("reset counters")
+            with patch("control_plane.device.DeviceSampler", return_value=sampler), patch("control_plane.device.ZeroMQStatePublisher"), patch("control_plane.device.time.sleep"):
+                audit = Path(temporary) / "audit.jsonl"
+                with self.assertRaisesRegex(RuntimeError, "Five consecutive"):
+                    publish("unused", 20, 10, 30, 60, audit)
+                self.assertEqual(sampler.sample.call_count, 5)
+                self.assertEqual(audit.read_text(), "")
 
 
 @unittest.skipUnless(os.environ.get("AERONODE_EVIDENCE_INTEGRATION") == "1", "Opt-in native integration")
