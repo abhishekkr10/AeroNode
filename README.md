@@ -1,10 +1,31 @@
 # AeroNode
 
-AeroNode is an experimental C++ edge-AI runtime that will select neural-network inference depth using model confidence and changing runtime constraints. The project focuses on a reproducible answer to one question: when can adaptive early exit reduce latency and compute while retaining acceptable accuracy?
+[![CI](https://github.com/abhishekkr10/AeroNode/actions/workflows/contracts.yml/badge.svg)](https://github.com/abhishekkr10/AeroNode/actions/workflows/contracts.yml)
 
-The authoritative project brief is `AeroNode_Project_Brief (1).pdf`. See `architecture.md` for the actual design and `current_status.md` for what is implemented now.
+AeroNode is an experimental C++17 image-inference runtime that conditionally skips later model stages, with Python tools for training, export and reproducible evaluation.
 
-User-confirmed repository: https://github.com/abhishekkr10/AeroNode
+## Recorded CPU result
+
+| Frozen policy | Accuracy | Mean latency | P95 latency |
+| --- | ---: | ---: | ---: |
+| Monolithic final-head baseline | 72.9400% | 2.8139 ms | 3.2859 ms |
+| Adaptive candidate | 72.6857% | 2.1052 ms | 3.0147 ms |
+
+Recorded mean reduction: **25.2%**, with a **0.2543 percentage-point** accuracy decrease. Setup: Windows x64 CPU, Release C++17, ONNX Runtime 1.30.0, batch 1, one intra/inter-op thread, three repetitions. The 1,966 evaluation images were held out from threshold fitting, but the wider validation set was previously used for checkpoint selection. This is not an independent training test set or an ARM/ESP32 benchmark.
+
+See [timing boundaries and warmup](docs/phase5e_validation.md) and [frozen-policy evaluation](docs/phase5f_validation.md). Request timing excludes preprocessing, input I/O and session startup. Generated raw benchmark artifacts are excluded from Git.
+
+## Execution path and source
+
+```text
+Image -> preprocessing -> native stage 1 -> policy decision
+                       -> further stages as needed -> prediction + trace
+Python -> training / export / reference checking / measurement
+```
+
+The native engine lives in [main.cpp](runtime/src/main.cpp) and [staged_model_runner.cpp](runtime/src/staged_model_runner.cpp). [CMake](CMakeLists.txt) requires C++17. Python's larger source footprint covers model and experiment tooling.
+
+**Cloning alone cannot run inference.** Install the supported toolchain/SDK and obtain matching stage models and their manifest using the [setup and transfer guide](docs/quickstart.md). Full dataset measurement additionally requires the checkpoint, dataset and benchmark inputs. A single-photo report is separate from the dataset benchmark.
 
 ## Try it: Inference Evidence
 
